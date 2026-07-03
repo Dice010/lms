@@ -19,10 +19,30 @@ import {
 // Mock Data — Lớp học có thể đăng ký
 // ------------------------------------
 const fakeAvailableClasses = [
-  { id: 1, code: "CS301-01", name: "Trí Tuệ Nhân Tạo",   teacher: "GV Nguyễn Hữu Đức", schedule: "T2-T4 07:30", slots: 35, registered: 28, enrolled: false },
-  { id: 2, code: "SE401-02", name: "Kiến Trúc Phần Mềm", teacher: "GV Trần Văn Minh",  schedule: "T3-T5 09:30", slots: 40, registered: 40, enrolled: false },
-  { id: 3, code: "DS201-01", name: "Khoa Học Dữ Liệu",   teacher: "GV Lê Thị Hoa",     schedule: "T2-T6 13:30", slots: 30, registered: 15, enrolled: true  },
-  { id: 4, code: "NW102-01", name: "Mạng Máy Tính",      teacher: "GV Phạm Quốc Bảo",  schedule: "T4-T6 07:30", slots: 35, registered: 20, enrolled: true  },
+  { id: 1, code: "CS301-01", name: "Trí Tuệ Nhân Tạo",   teacher: "GV Nguyễn Hữu Đức", schedule: "T2-T4 07:30", slots: 35, registered: 28, enrolled: false,
+    room: "B301", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20",
+    timetable: [
+      { day: "Thứ 2", time: "07:30 - 09:00", room: "B301" },
+      { day: "Thứ 4", time: "07:30 - 09:00", room: "B301" },
+    ]},
+  { id: 2, code: "SE401-02", name: "Kiến Trúc Phần Mềm", teacher: "GV Trần Văn Minh",  schedule: "T3-T5 09:30", slots: 40, registered: 40, enrolled: false,
+    room: "A201", credits: 4, startDate: "2025-09-01", endDate: "2025-12-20",
+    timetable: [
+      { day: "Thứ 3", time: "09:30 - 11:00", room: "A201" },
+      { day: "Thứ 5", time: "09:30 - 11:00", room: "A201" },
+    ]},
+  { id: 3, code: "DS201-01", name: "Khoa Học Dữ Liệu",   teacher: "GV Lê Thị Hoa",     schedule: "T2-T6 13:30", slots: 30, registered: 15, enrolled: true,
+    room: "C102", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20",
+    timetable: [
+      { day: "Thứ 2", time: "13:30 - 15:00", room: "C102" },
+      { day: "Thứ 6", time: "13:30 - 15:00", room: "C102" },
+    ]},
+  { id: 4, code: "NW102-01", name: "Mạng Máy Tính",      teacher: "GV Phạm Quốc Bảo",  schedule: "T4-T6 07:30", slots: 35, registered: 20, enrolled: true,
+    room: "B205", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20",
+    timetable: [
+      { day: "Thứ 4", time: "07:30 - 09:00", room: "B205" },
+      { day: "Thứ 6", time: "07:30 - 09:00", room: "B205" },
+    ]},
 ];
 
 // ------------------------------------
@@ -314,22 +334,54 @@ export default function SinhVienDashboard() {
 
       {/* Dialog: Chi tiết lớp học */}
       <Dialog open={showClassDetail} onOpenChange={setShowClassDetail}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Chi Tiết Lớp Học</DialogTitle></DialogHeader>
           {selectedClass && (
-            <div className="space-y-2 py-2 text-sm">
-              {[
-                ["Mã lớp",     selectedClass.code],
-                ["Tên môn",    selectedClass.name],
-                ["Giảng viên", selectedClass.teacher],
-                ["Lịch học",   selectedClass.schedule],
-                ["Sĩ số",      `${selectedClass.registered}/${selectedClass.slots}`],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between border-b border-slate-100 pb-2">
-                  <span className="text-slate-500">{label}</span>
-                  <span className="font-medium">{value}</span>
+            <div className="space-y-4 py-2 text-sm">
+              {/* Thông tin cơ bản */}
+              <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-4">
+                {[
+                  ["Mã lớp",     selectedClass.code],
+                  ["Số tín chỉ", `${selectedClass.credits} TC`],
+                  ["Giảng viên", selectedClass.teacher],
+                  ["Phòng học",  selectedClass.room],
+                  ["Sĩ số",      `${selectedClass.registered}/${selectedClass.slots}`],
+                  ["Trạng thái", selectedClass.registered >= selectedClass.slots ? "Hết chỗ" : `Còn ${selectedClass.slots - selectedClass.registered} chỗ`],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-xs text-slate-400">{label}</p>
+                    <p className="font-medium text-slate-700">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tên môn học */}
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Tên môn học</p>
+                <p className="text-base font-semibold text-slate-800">{selectedClass.name}</p>
+              </div>
+
+              {/* Lịch học chi tiết */}
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">Lịch học chi tiết</p>
+                <div className="space-y-2">
+                  {selectedClass.timetable.map((t, idx) => (
+                    <div key={idx} className="flex items-center gap-3 rounded-md bg-blue-50 border border-blue-100 px-3 py-2">
+                      <span className="rounded bg-blue-600 text-white text-xs font-bold px-2 py-0.5 min-w-[60px] text-center">
+                        {t.day}
+                      </span>
+                      <span className="text-slate-700 font-medium">{t.time}</span>
+                      <span className="text-slate-500 text-xs ml-auto">Phòng {t.room}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              {/* Thời gian học */}
+              <div className="flex gap-4 text-xs text-slate-500">
+                <span>📅 Bắt đầu: <strong className="text-slate-700">{selectedClass.startDate}</strong></span>
+                <span>🏁 Kết thúc: <strong className="text-slate-700">{selectedClass.endDate}</strong></span>
+              </div>
             </div>
           )}
           <DialogFooter className="gap-2">

@@ -79,6 +79,17 @@ export default function GiangVienDashboard() {
   const [editExam, setEditExam]             = useState<Exam | null>(null);
   const [examForm, setExamForm]             = useState({ title: "", subject: "", duration: "", questions: "", openAt: "" });
 
+  // Câu hỏi & đáp án
+  type QuestionItem = { question: string; optionA: string; optionB: string; optionC: string; optionD: string; answer: "A" | "B" | "C" | "D" };
+  const emptyQuestion = (): QuestionItem => ({ question: "", optionA: "", optionB: "", optionC: "", optionD: "", answer: "A" });
+  const [questionList, setQuestionList] = useState<QuestionItem[]>([emptyQuestion()]);
+
+  const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
+  const removeQuestion = (idx: number) => setQuestionList(questionList.filter((_, i) => i !== idx));
+  const updateQuestion = (idx: number, field: keyof QuestionItem, value: string) => {
+    setQuestionList(questionList.map((q, i) => i === idx ? { ...q, [field]: value } : q));
+  };
+
   /* ---- Handlers: Bài giảng ---- */
   const openAddLesson = () => {
     setEditLesson(null);
@@ -110,11 +121,13 @@ export default function GiangVienDashboard() {
   const openAddExam = () => {
     setEditExam(null);
     setExamForm({ title: "", subject: "", duration: "", questions: "", openAt: "" });
+    setQuestionList([emptyQuestion()]);
     setShowExamDialog(true);
   };
   const openEditExam = (e: Exam) => {
     setEditExam(e);
     setExamForm({ title: e.title, subject: e.subject, duration: String(e.duration), questions: String(e.questions), openAt: e.openAt });
+    setQuestionList([emptyQuestion()]);
     setShowExamDialog(true);
   };
   const handleSaveExam = () => {
@@ -436,6 +449,56 @@ export default function GiangVienDashboard() {
               <Input placeholder="VD: 2025-07-01 08:00"
                 value={examForm.openAt}
                 onChange={e => setExamForm({ ...examForm, openAt: e.target.value })} />
+            </div>
+
+            {/* Phần câu hỏi & đáp án */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold text-slate-700">Câu hỏi & Đáp án</Label>
+                <Button type="button" size="sm" variant="outline"
+                  className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                  onClick={addQuestion}>
+                  <PlusCircle className="mr-1 h-3 w-3" /> Thêm câu
+                </Button>
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-4 pr-1">
+                {questionList.map((q, idx) => (
+                  <div key={idx} className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-purple-600">Câu {idx + 1}</span>
+                      {questionList.length > 1 && (
+                        <button onClick={() => removeQuestion(idx)}
+                          className="text-red-400 hover:text-red-600 text-xs">✕ Xóa</button>
+                      )}
+                    </div>
+                    <Textarea placeholder={`Nội dung câu hỏi ${idx + 1}...`} rows={2}
+                      value={q.question}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateQuestion(idx, "question", e.target.value)} />
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["A", "B", "C", "D"] as const).map(opt => (
+                        <div key={opt} className="flex items-center gap-1">
+                          <span className={`text-xs font-bold w-5 ${q.answer === opt ? "text-emerald-600" : "text-slate-400"}`}>{opt}.</span>
+                          <Input placeholder={`Đáp án ${opt}`} className="text-xs h-8"
+                            value={q[`option${opt}` as keyof QuestionItem] as string}
+                            onChange={e => updateQuestion(idx, `option${opt}` as keyof QuestionItem, e.target.value)} />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">Đáp án đúng:</span>
+                      {(["A", "B", "C", "D"] as const).map(opt => (
+                        <button key={opt} type="button"
+                          onClick={() => updateQuestion(idx, "answer", opt)}
+                          className={`rounded px-2 py-0.5 text-xs font-bold transition-colors ${
+                            q.answer === opt
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                          }`}>{opt}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
           <DialogFooter>
