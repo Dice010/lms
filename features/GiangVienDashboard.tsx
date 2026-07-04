@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -46,12 +46,13 @@ const fakeResults = [
   { id: 1, examTitle: "Kiểm tra giữa kỳ OOP", student: "Nguyễn Thị Mai",  score: 8.5, submittedAt: "2025-06-15 09:00" },
   { id: 2, examTitle: "Kiểm tra giữa kỳ OOP", student: "Trần Văn Hùng",   score: 7.0, submittedAt: "2025-06-15 09:45" },
   { id: 3, examTitle: "Kiểm tra giữa kỳ OOP", student: "Lê Quốc Bảo",     score: 9.0, submittedAt: "2025-06-15 08:50" },
-  { id: 4, examTitle: "Quiz Stack & Queue",    student: "Nguyễn Thị Mai",  score: 10,  submittedAt: "2025-06-25 14:12" },
+{ id: 4, examTitle: "Quiz Stack & Queue",    student: "Nguyễn Thị Mai",  score: 10,  submittedAt: "2025-06-25 14:12" },
   { id: 5, examTitle: "Quiz Stack & Queue",    student: "Phạm Thị Lan",    score: 6.5, submittedAt: "2025-06-25 14:30" },
 ];
 
 type Lesson  = (typeof fakeLessons)[0];
 type Exam    = (typeof fakeExams)[0];
+type Result  = (typeof fakeResults)[0]; // Thêm type cho result
 type MainTab = "lessons" | "exams" | "results";
 
 // ------------------------------------
@@ -67,7 +68,31 @@ function StatusBadge({ status }: { status: string }) {
 export default function GiangVienDashboard() {
   const [lessons, setLessons]     = useState<Lesson[]>(fakeLessons);
   const [exams, setExams]         = useState<Exam[]>(fakeExams);
+  
+  // TÍNH NĂNG MỚI: State lưu kết quả sinh viên
+  const [results, setResults]     = useState<Result[]>(fakeResults);
   const [activeTab, setActiveTab] = useState<MainTab>("lessons");
+
+  // TÍNH NĂNG MỚI: Đồng bộ dữ liệu từ localStorage (Sinh viên nộp bài sẽ nhảy vào đây)
+  useEffect(() => {
+    // 1. Lấy dữ liệu hiện tại từ localStorage (nếu có)
+    const storedResults = localStorage.getItem("examResults");
+    if (storedResults) {
+      setResults(JSON.parse(storedResults));
+    } else {
+      // Nếu chưa có, khởi tạo bằng fakeResults để có data hiển thị ban đầu
+      localStorage.setItem("examResults", JSON.stringify(fakeResults));
+    }
+
+    // 2. Lắng nghe sự kiện thay đổi localStorage (để tự động cập nhật nếu mở 2 tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "examResults" && e.newValue) {
+        setResults(JSON.parse(e.newValue));
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   // Lesson dialog
   const [showLessonDialog, setShowLessonDialog] = useState(false);
@@ -83,8 +108,7 @@ export default function GiangVienDashboard() {
   type QuestionItem = { question: string; optionA: string; optionB: string; optionC: string; optionD: string; answer: "A" | "B" | "C" | "D" };
   const emptyQuestion = (): QuestionItem => ({ question: "", optionA: "", optionB: "", optionC: "", optionD: "", answer: "A" });
   const [questionList, setQuestionList] = useState<QuestionItem[]>([emptyQuestion()]);
-
-  const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
+const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
   const removeQuestion = (idx: number) => setQuestionList(questionList.filter((_, i) => i !== idx));
   const updateQuestion = (idx: number, field: keyof QuestionItem, value: string) => {
     setQuestionList(questionList.map((q, i) => i === idx ? { ...q, [field]: value } : q));
@@ -151,10 +175,10 @@ export default function GiangVienDashboard() {
 
   /* ---- Stats ---- */
   const stats = [
-    { label: "Tổng bài giảng",    value: lessons.length,                                        icon: <BookOpen      className="h-5 w-5 text-purple-500" /> },
+{ label: "Tổng bài giảng",    value: lessons.length,                                       icon: <BookOpen      className="h-5 w-5 text-purple-500" /> },
     { label: "Đã công bố",        value: lessons.filter(l => l.status === "Đã công bố").length,  icon: <Send          className="h-5 w-5 text-emerald-500" /> },
     { label: "Tổng bài kiểm tra", value: exams.length,                                           icon: <ClipboardList className="h-5 w-5 text-blue-500"   /> },
-    { label: "Kết quả đã chấm",   value: fakeResults.length,                                     icon: <BarChart2     className="h-5 w-5 text-amber-500"  /> },
+    { label: "Kết quả đã chấm",   value: results.length, /* Đã update dùng state results */      icon: <BarChart2     className="h-5 w-5 text-amber-500"  /> },
   ];
 
   /* ---- Render ---- */
@@ -208,7 +232,7 @@ export default function GiangVienDashboard() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Danh Sách Bài Giảng</CardTitle>
             <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={openAddLesson}>
-              <PlusCircle className="mr-1 h-4 w-4" /> Tạo bài học mới
+<PlusCircle className="mr-1 h-4 w-4" /> Tạo bài học mới
             </Button>
           </CardHeader>
           <CardContent>
@@ -269,7 +293,7 @@ export default function GiangVienDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Danh Sách Bài Kiểm Tra</CardTitle>
-            <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={openAddExam}>
+<Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={openAddExam}>
               <PlusCircle className="mr-1 h-4 w-4" /> Tạo bài kiểm tra
             </Button>
           </CardHeader>
@@ -330,7 +354,7 @@ export default function GiangVienDashboard() {
 
       {/* Tab: Kết quả sinh viên */}
       {activeTab === "results" && (
-        <Card>
+<Card>
           <CardHeader>
             <CardTitle className="text-base">Kết Quả Bài Kiểm Tra</CardTitle>
           </CardHeader>
@@ -346,7 +370,8 @@ export default function GiangVienDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fakeResults.map(r => (
+                {/* Đã chuyển từ fakeResults.map sang results.map */}
+                {results.map(r => (
                   <TableRow key={r.id}>
                     <TableCell className="text-slate-400">{r.id}</TableCell>
                     <TableCell className="font-medium">{r.examTitle}</TableCell>
@@ -393,7 +418,7 @@ export default function GiangVienDashboard() {
                 <option>PDF</option>
                 <option>Video</option>
                 <option>PPT</option>
-              </select>
+</select>
             </div>
             <div className="flex items-center gap-2 rounded-lg border-2 border-dashed border-slate-200 p-4 text-slate-400">
               <Upload className="h-5 w-5" />
@@ -456,7 +481,7 @@ export default function GiangVienDashboard() {
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold text-slate-700">Câu hỏi & Đáp án</Label>
                 <Button type="button" size="sm" variant="outline"
-                  className="text-purple-600 border-purple-300 hover:bg-purple-50"
+className="text-purple-600 border-purple-300 hover:bg-purple-50"
                   onClick={addQuestion}>
                   <PlusCircle className="mr-1 h-3 w-3" /> Thêm câu
                 </Button>
@@ -505,7 +530,7 @@ export default function GiangVienDashboard() {
             <Button variant="outline" onClick={() => setShowExamDialog(false)}>Hủy</Button>
             <Button className="bg-purple-600 hover:bg-purple-700"
               disabled={!examForm.title || !examForm.subject}
-              onClick={handleSaveExam}>
+onClick={handleSaveExam}>
               {editExam ? "Lưu thay đổi" : "Tạo bài kiểm tra"}
             </Button>
           </DialogFooter>
@@ -513,4 +538,4 @@ export default function GiangVienDashboard() {
       </Dialog>
     </div>
   );
-}
+} 
