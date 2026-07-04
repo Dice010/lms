@@ -1,0 +1,27 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+// 1. GENERATOR: Chỉ định công cụ sinh code (luôn là prisma-client-js cho Next.js)
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 2. DATASOURCE: Khai báo loại Database
+datasource db {
+  provider = "sqlite" // Chúng ta chọn dùng SQLite siêu nhẹ ở đây
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String   // Vì làm Auth cứng tạm thời nên ta lưu pass đơn giản
+  fullName  String
+  
+  // Cột Role quản lý quyền hạn (Lưu dưới dạng chuỗi: "ADMIN", "HIEU_TRUONG", "HR", "PHONG_DAO_TAO", "TRUONG_BO_MON", "GIANG_VIEN", "SINH_VIEN")
+  role      String   @default("SINH_VIEN") 
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // Prisma tự cập nhật thời gian mỗi khi bạn sửa thông tin user
+}
