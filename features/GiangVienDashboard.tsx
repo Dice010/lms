@@ -15,25 +15,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BookOpen, PlusCircle, Pencil, Trash2, Send,
-  ClipboardList, Clock, BarChart2, Upload,
+  ClipboardList, Clock, BarChart2, ArrowLeft
 } from "lucide-react";
+
+// ------------------------------------
+// Type cho cấu trúc nội dung Bài Giảng
+// ------------------------------------
+type SubSection = { id: string; title: string; content: string };
+type MajorSection = { id: string; title: string; subItems: SubSection[] };
 
 // ------------------------------------
 // Mock Data — Bài giảng
 // ------------------------------------
 const fakeLessons = [
-  { id: 1, title: "Giới thiệu về Lập trình OOP",  subject: "Lập trình Java", type: "Video", uploadedAt: "2025-06-01", status: "Đã công bố" },
-  { id: 2, title: "Kế thừa và Đa hình",            subject: "Lập trình Java", type: "PDF",   uploadedAt: "2025-06-05", status: "Đã công bố" },
-  { id: 3, title: "Design Pattern - Singleton",     subject: "Lập trình Java", type: "PPT",   uploadedAt: "2025-06-10", status: "Bản nháp"   },
-  { id: 4, title: "Cấu trúc dữ liệu Stack",         subject: "CTDL & GT",      type: "Video", uploadedAt: "2025-05-20", status: "Đã công bố" },
-  { id: 5, title: "Thuật toán sắp xếp",             subject: "CTDL & GT",      type: "PDF",   uploadedAt: "2025-05-25", status: "Bản nháp"   },
+  { id: 1, title: "Giới thiệu về Lập trình OOP",  subject: "Lập trình Java", uploadedAt: "2025-06-01", status: "Đã công bố", content: [] as MajorSection[] },
+  { id: 2, title: "Kế thừa và Đa hình",            subject: "Lập trình Java", uploadedAt: "2025-06-05", status: "Đã công bố", content: [] as MajorSection[] },
+  { id: 3, title: "Design Pattern - Singleton",     subject: "Lập trình Java", uploadedAt: "2025-06-10", status: "Bản nháp",   content: [] as MajorSection[] },
+  { id: 4, title: "Cấu trúc dữ liệu Stack",         subject: "CTDL & GT",      uploadedAt: "2025-05-20", status: "Đã công bố", content: [] as MajorSection[] },
+  { id: 5, title: "Thuật toán sắp xếp",             subject: "CTDL & GT",      uploadedAt: "2025-05-25", status: "Bản nháp",   content: [] as MajorSection[] },
 ];
 
 // ------------------------------------
 // Mock Data — Bài kiểm tra
 // ------------------------------------
 const fakeExams = [
-  { id: 1, title: "Kiểm tra giữa kỳ OOP",   subject: "Lập trình Java", duration: 60, questions: 30, openAt: "2025-06-15 08:00", status: "Đã công bố" },
+  { id: 1, title: "Kiểm tra giữa kỳ OOP",  subject: "Lập trình Java", duration: 60, questions: 30, openAt: "2025-06-15 08:00", status: "Đã công bố" },
   { id: 2, title: "Quiz chương 3 - Design",  subject: "Lập trình Java", duration: 20, questions: 10, openAt: "2025-06-20 10:00", status: "Bản nháp"   },
   { id: 3, title: "Kiểm tra cuối kỳ CTDL",  subject: "CTDL & GT",      duration: 90, questions: 40, openAt: "2025-07-01 07:30", status: "Bản nháp"   },
   { id: 4, title: "Quiz Stack & Queue",       subject: "CTDL & GT",      duration: 15, questions: 8,  openAt: "2025-06-25 14:00", status: "Đã công bố" },
@@ -46,13 +52,13 @@ const fakeResults = [
   { id: 1, examTitle: "Kiểm tra giữa kỳ OOP", student: "Nguyễn Thị Mai",  score: 8.5, submittedAt: "2025-06-15 09:00" },
   { id: 2, examTitle: "Kiểm tra giữa kỳ OOP", student: "Trần Văn Hùng",   score: 7.0, submittedAt: "2025-06-15 09:45" },
   { id: 3, examTitle: "Kiểm tra giữa kỳ OOP", student: "Lê Quốc Bảo",     score: 9.0, submittedAt: "2025-06-15 08:50" },
-{ id: 4, examTitle: "Quiz Stack & Queue",    student: "Nguyễn Thị Mai",  score: 10,  submittedAt: "2025-06-25 14:12" },
+  { id: 4, examTitle: "Quiz Stack & Queue",    student: "Nguyễn Thị Mai",  score: 10,  submittedAt: "2025-06-25 14:12" },
   { id: 5, examTitle: "Quiz Stack & Queue",    student: "Phạm Thị Lan",    score: 6.5, submittedAt: "2025-06-25 14:30" },
 ];
 
 type Lesson  = (typeof fakeLessons)[0];
 type Exam    = (typeof fakeExams)[0];
-type Result  = (typeof fakeResults)[0]; // Thêm type cho result
+type Result  = (typeof fakeResults)[0];
 type MainTab = "lessons" | "exams" | "results";
 
 // ------------------------------------
@@ -62,29 +68,32 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={status === "Đã công bố" ? "default" : "secondary"}>{status}</Badge>;
 }
 
+const toRoman = (num: number) => {
+  const roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+  return roman[num] || (num + 1).toString();
+};
+
 // ------------------------------------
 // Main Component
 // ------------------------------------
 export default function GiangVienDashboard() {
+  // --- TÍNH NĂNG MỚI: Quản lý View (Dashboard hoặc Fullpage Editor) ---
+  const [currentView, setCurrentView] = useState<"dashboard" | "lesson_editor">("dashboard");
+
   const [lessons, setLessons]     = useState<Lesson[]>(fakeLessons);
   const [exams, setExams]         = useState<Exam[]>(fakeExams);
   
-  // TÍNH NĂNG MỚI: State lưu kết quả sinh viên
   const [results, setResults]     = useState<Result[]>(fakeResults);
   const [activeTab, setActiveTab] = useState<MainTab>("lessons");
 
-  // TÍNH NĂNG MỚI: Đồng bộ dữ liệu từ localStorage (Sinh viên nộp bài sẽ nhảy vào đây)
   useEffect(() => {
-    // 1. Lấy dữ liệu hiện tại từ localStorage (nếu có)
     const storedResults = localStorage.getItem("examResults");
     if (storedResults) {
       setResults(JSON.parse(storedResults));
     } else {
-      // Nếu chưa có, khởi tạo bằng fakeResults để có data hiển thị ban đầu
       localStorage.setItem("examResults", JSON.stringify(fakeResults));
     }
 
-    // 2. Lắng nghe sự kiện thay đổi localStorage (để tự động cập nhật nếu mở 2 tab)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "examResults" && e.newValue) {
         setResults(JSON.parse(e.newValue));
@@ -94,21 +103,25 @@ export default function GiangVienDashboard() {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
-  // Lesson dialog
-  const [showLessonDialog, setShowLessonDialog] = useState(false);
+  // ------------------------------------
+  // States cho Form Bài Giảng
+  // ------------------------------------
   const [editLesson, setEditLesson]             = useState<Lesson | null>(null);
-  const [lessonForm, setLessonForm]             = useState({ title: "", subject: "", type: "PDF" });
+  const [lessonForm, setLessonForm]             = useState({ title: "", subject: "" });
+  const [lessonSections, setLessonSections]     = useState<MajorSection[]>([]);
 
-  // Exam dialog
+  // ------------------------------------
+  // States cho Form Bài Kiểm Tra
+  // ------------------------------------
   const [showExamDialog, setShowExamDialog] = useState(false);
   const [editExam, setEditExam]             = useState<Exam | null>(null);
   const [examForm, setExamForm]             = useState({ title: "", subject: "", duration: "", questions: "", openAt: "" });
 
-  // Câu hỏi & đáp án
   type QuestionItem = { question: string; optionA: string; optionB: string; optionC: string; optionD: string; answer: "A" | "B" | "C" | "D" };
   const emptyQuestion = (): QuestionItem => ({ question: "", optionA: "", optionB: "", optionC: "", optionD: "", answer: "A" });
   const [questionList, setQuestionList] = useState<QuestionItem[]>([emptyQuestion()]);
-const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
+  
+  const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
   const removeQuestion = (idx: number) => setQuestionList(questionList.filter((_, i) => i !== idx));
   const updateQuestion = (idx: number, field: keyof QuestionItem, value: string) => {
     setQuestionList(questionList.map((q, i) => i === idx ? { ...q, [field]: value } : q));
@@ -117,29 +130,63 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
   /* ---- Handlers: Bài giảng ---- */
   const openAddLesson = () => {
     setEditLesson(null);
-    setLessonForm({ title: "", subject: "", type: "PDF" });
-    setShowLessonDialog(true);
+    setLessonForm({ title: "", subject: "" });
+    setLessonSections([]);
+    setCurrentView("lesson_editor"); // Chuyển sang màn hình Editor
   };
+  
   const openEditLesson = (l: Lesson) => {
     setEditLesson(l);
-    setLessonForm({ title: l.title, subject: l.subject, type: l.type });
-    setShowLessonDialog(true);
+    setLessonForm({ title: l.title, subject: l.subject });
+    setLessonSections(l.content || []);
+    setCurrentView("lesson_editor"); // Chuyển sang màn hình Editor
   };
+
   const handleSaveLesson = () => {
     if (!lessonForm.title || !lessonForm.subject) return;
     if (editLesson) {
-      setLessons(lessons.map(l => l.id === editLesson.id ? { ...l, ...lessonForm } : l));
+      setLessons(lessons.map(l => l.id === editLesson.id ? { ...l, ...lessonForm, content: lessonSections } : l));
     } else {
       setLessons([...lessons, {
         id: lessons.length + 1, ...lessonForm,
         uploadedAt: new Date().toISOString().slice(0, 10),
         status: "Bản nháp",
+        content: lessonSections
       }]);
     }
-    setShowLessonDialog(false);
+    setCurrentView("dashboard"); // Trở lại màn hình Dashboard
   };
+  
   const handleDeleteLesson   = (id: number) => setLessons(lessons.filter(l => l.id !== id));
   const handlePublishLesson  = (id: number) => setLessons(lessons.map(l => l.id === id ? { ...l, status: "Đã công bố" } : l));
+
+  // --- Logic thêm/xóa/sửa cấu trúc bài học ---
+  const addMajorSection = () => {
+    setLessonSections([...lessonSections, { id: Date.now().toString(), title: "", subItems: [] }]);
+  };
+  const removeMajorSection = (idx: number) => {
+    setLessonSections(lessonSections.filter((_, i) => i !== idx));
+  };
+  const updateMajorSectionTitle = (idx: number, title: string) => {
+    const newSecs = [...lessonSections];
+    newSecs[idx].title = title;
+    setLessonSections(newSecs);
+  };
+  const addSubSection = (majorIdx: number) => {
+    const newSecs = [...lessonSections];
+    newSecs[majorIdx].subItems.push({ id: Date.now().toString(), title: "", content: "" });
+    setLessonSections(newSecs);
+  };
+  const removeSubSection = (majorIdx: number, subIdx: number) => {
+    const newSecs = [...lessonSections];
+    newSecs[majorIdx].subItems = newSecs[majorIdx].subItems.filter((_, i) => i !== subIdx);
+    setLessonSections(newSecs);
+  };
+  const updateSubSection = (majorIdx: number, subIdx: number, field: "title" | "content", value: string) => {
+    const newSecs = [...lessonSections];
+    newSecs[majorIdx].subItems[subIdx][field] = value;
+    setLessonSections(newSecs);
+  };
 
   /* ---- Handlers: Bài kiểm tra ---- */
   const openAddExam = () => {
@@ -175,13 +222,148 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
 
   /* ---- Stats ---- */
   const stats = [
-{ label: "Tổng bài giảng",    value: lessons.length,                                       icon: <BookOpen      className="h-5 w-5 text-purple-500" /> },
+    { label: "Tổng bài giảng",    value: lessons.length,                                       icon: <BookOpen      className="h-5 w-5 text-purple-500" /> },
     { label: "Đã công bố",        value: lessons.filter(l => l.status === "Đã công bố").length,  icon: <Send          className="h-5 w-5 text-emerald-500" /> },
-    { label: "Tổng bài kiểm tra", value: exams.length,                                           icon: <ClipboardList className="h-5 w-5 text-blue-500"   /> },
-    { label: "Kết quả đã chấm",   value: results.length, /* Đã update dùng state results */      icon: <BarChart2     className="h-5 w-5 text-amber-500"  /> },
+    { label: "Tổng bài kiểm tra", value: exams.length,                                         icon: <ClipboardList className="h-5 w-5 text-blue-500"   /> },
+    { label: "Kết quả đã chấm",   value: results.length,                                       icon: <BarChart2     className="h-5 w-5 text-amber-500"  /> },
   ];
 
-  /* ---- Render ---- */
+  // ============================================================================
+  // RENDER MÀN HÌNH SOẠN BÀI (FULL PAGE EDITOR)
+  // ============================================================================
+  if (currentView === "lesson_editor") {
+    return (
+      <div className="min-h-screen bg-slate-50 p-6 md:p-10">
+        <div className="mx-auto max-w-5xl space-y-6">
+          
+          {/* Top Bar Editor */}
+          <div className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm border border-slate-200">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" className="text-slate-500 hover:text-slate-800" onClick={() => setCurrentView("dashboard")}>
+                <ArrowLeft className="h-5 w-5 mr-2" /> Quay lại
+              </Button>
+              <div className="h-6 w-px bg-slate-200"></div>
+              <h1 className="text-xl font-bold text-slate-800">
+                {editLesson ? "Chỉnh Sửa Bài Giảng" : "Tạo Bài Học Mới"}
+              </h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" onClick={() => setCurrentView("dashboard")}>Hủy</Button>
+              <Button className="bg-purple-600 hover:bg-purple-700" disabled={!lessonForm.title || !lessonForm.subject} onClick={handleSaveLesson}>
+                {editLesson ? "Lưu thay đổi" : "Lưu bài học"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Nội dung Editor */}
+          <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200 space-y-8">
+            {/* Cấu hình cơ bản */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-base">Tiêu đề bài học <span className="text-red-500">*</span></Label>
+                <Input placeholder="VD: Giới thiệu về OOP" className="h-12 text-base"
+                  value={lessonForm.title}
+                  onChange={e => setLessonForm({ ...lessonForm, title: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-base">Môn học <span className="text-red-500">*</span></Label>
+                <Input placeholder="VD: Lập trình Java" className="h-12 text-base"
+                  value={lessonForm.subject}
+                  onChange={e => setLessonForm({ ...lessonForm, subject: e.target.value })} />
+              </div>
+            </div>
+
+            <hr className="border-slate-100" />
+
+            {/* Khung nhập liệu chi tiết */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">Nội dung chi tiết</h3>
+                  <p className="text-sm text-slate-500">Soạn thảo cấu trúc bài giảng của bạn bên dưới.</p>
+                </div>
+                <Button className="bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200" onClick={addMajorSection}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Thêm phần lớn (I, II, III)
+                </Button>
+              </div>
+
+              {lessonSections.length === 0 ? (
+                <div className="rounded-xl border-2 border-dashed border-slate-200 py-16 text-center">
+                  <BookOpen className="mx-auto h-12 w-12 text-slate-300 mb-4" />
+                  <p className="text-slate-500">Chưa có nội dung nào.</p>
+                  <p className="text-sm text-slate-400">Hãy nhấn "Thêm phần lớn" để bắt đầu soạn bài.</p>
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {lessonSections.map((majorSec, mIdx) => (
+                    <div key={majorSec.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-6 shadow-sm">
+                      {/* Tiêu đề Phần lớn */}
+                      <div className="mb-6 flex items-start gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-700 font-black text-lg">
+                          {toRoman(mIdx)}
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <Input 
+                            placeholder="Tiêu đề phần (VD: Khái niệm cơ bản)"
+                            className="font-bold text-lg h-12 bg-white"
+                            value={majorSec.title}
+                            onChange={(e) => updateMajorSectionTitle(mIdx, e.target.value)}
+                          />
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-12 w-12 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => removeMajorSection(mIdx)}>
+                          <Trash2 className="h-5 w-5" />
+                        </Button>
+                      </div>
+
+                      {/* Các phần nhỏ bên trong */}
+                      <div className="ml-16 space-y-4">
+                        {majorSec.subItems.map((subItem, sIdx) => (
+                          <div key={subItem.id} className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <div className="absolute right-3 top-3">
+                              <Button variant="ghost" size="sm" className="h-8 text-red-400 hover:text-red-600 px-3" onClick={() => removeSubSection(mIdx, sIdx)}>
+                                Xóa mục này
+                              </Button>
+                            </div>
+                            <div className="space-y-4 pr-24">
+                              <div className="flex items-center gap-3">
+                                <span className="text-base font-bold text-slate-400">{sIdx + 1}.</span>
+                                <Input 
+                                  placeholder="Tiêu đề mục nhỏ" 
+                                  className="h-10 text-base font-medium"
+                                  value={subItem.title}
+                                  onChange={(e) => updateSubSection(mIdx, sIdx, "title", e.target.value)}
+                                />
+                              </div>
+                              <Textarea 
+                                placeholder="Soạn nội dung chi tiết cho mục này..." 
+                                className="min-h-[150px] text-base p-4 resize-y leading-relaxed"
+                                value={subItem.content}
+                                onChange={(e) => updateSubSection(mIdx, sIdx, "content", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        
+                        <div className="pt-2">
+                          <Button size="sm" variant="ghost" className="text-slate-600 hover:text-purple-700 hover:bg-purple-100 text-sm font-medium" onClick={() => addSubSection(mIdx)}>
+                            <PlusCircle className="mr-2 h-4 w-4" /> Thêm mục nhỏ
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // RENDER MÀN HÌNH DASHBOARD (GIAO DIỆN CHÍNH)
+  // ============================================================================
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       {/* Header */}
@@ -213,7 +395,7 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
         {([
           { key: "lessons", label: "Quản Lý Bài Giảng",    icon: <BookOpen      className="h-4 w-4" /> },
           { key: "exams",   label: "Quản Lý Bài Kiểm Tra", icon: <ClipboardList className="h-4 w-4" /> },
-          { key: "results", label: "Kết Quả Sinh Viên",     icon: <BarChart2     className="h-4 w-4" /> },
+          { key: "results", label: "Kết Quả Sinh Viên",    icon: <BarChart2     className="h-4 w-4" /> },
         ] as { key: MainTab; label: string; icon: React.ReactNode }[]).map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
@@ -231,8 +413,9 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Danh Sách Bài Giảng</CardTitle>
+            {/* Nút gọi hàm openAddLesson để mở màn hình fullpage */}
             <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={openAddLesson}>
-<PlusCircle className="mr-1 h-4 w-4" /> Tạo bài học mới
+              <PlusCircle className="mr-1 h-4 w-4" /> Tạo bài học mới
             </Button>
           </CardHeader>
           <CardContent>
@@ -242,8 +425,7 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
                   <TableHead>#</TableHead>
                   <TableHead>Tiêu đề</TableHead>
                   <TableHead>Môn học</TableHead>
-                  <TableHead>Loại</TableHead>
-                  <TableHead>Ngày tải</TableHead>
+                  <TableHead>Ngày tạo</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
@@ -254,11 +436,6 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
                     <TableCell className="text-slate-400">{l.id}</TableCell>
                     <TableCell className="font-medium">{l.title}</TableCell>
                     <TableCell className="text-slate-500">{l.subject}</TableCell>
-                    <TableCell>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                        {l.type}
-                      </span>
-                    </TableCell>
                     <TableCell className="text-slate-400 text-sm">{l.uploadedAt}</TableCell>
                     <TableCell><StatusBadge status={l.status} /></TableCell>
                     <TableCell className="text-right">
@@ -293,7 +470,7 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Danh Sách Bài Kiểm Tra</CardTitle>
-<Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={openAddExam}>
+            <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={openAddExam}>
               <PlusCircle className="mr-1 h-4 w-4" /> Tạo bài kiểm tra
             </Button>
           </CardHeader>
@@ -354,7 +531,7 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
 
       {/* Tab: Kết quả sinh viên */}
       {activeTab === "results" && (
-<Card>
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">Kết Quả Bài Kiểm Tra</CardTitle>
           </CardHeader>
@@ -370,7 +547,6 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Đã chuyển từ fakeResults.map sang results.map */}
                 {results.map(r => (
                   <TableRow key={r.id}>
                     <TableCell className="text-slate-400">{r.id}</TableCell>
@@ -391,52 +567,7 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
         </Card>
       )}
 
-      {/* Dialog: Tạo/Sửa bài giảng */}
-      <Dialog open={showLessonDialog} onOpenChange={setShowLessonDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editLesson ? "Chỉnh Sửa Bài Giảng" : "Tạo Bài Học Mới"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1">
-              <Label>Tiêu đề bài học</Label>
-              <Input placeholder="VD: Giới thiệu về OOP"
-                value={lessonForm.title}
-                onChange={e => setLessonForm({ ...lessonForm, title: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Môn học</Label>
-              <Input placeholder="VD: Lập trình Java"
-                value={lessonForm.subject}
-                onChange={e => setLessonForm({ ...lessonForm, subject: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label>Loại tài liệu</Label>
-              <select value={lessonForm.type}
-                onChange={e => setLessonForm({ ...lessonForm, type: e.target.value })}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm">
-                <option>PDF</option>
-                <option>Video</option>
-                <option>PPT</option>
-</select>
-            </div>
-            <div className="flex items-center gap-2 rounded-lg border-2 border-dashed border-slate-200 p-4 text-slate-400">
-              <Upload className="h-5 w-5" />
-              <span className="text-sm">Nhấn để tải file lên (PDF, Video, PPT)</span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowLessonDialog(false)}>Hủy</Button>
-            <Button className="bg-purple-600 hover:bg-purple-700"
-              disabled={!lessonForm.title || !lessonForm.subject}
-              onClick={handleSaveLesson}>
-              {editLesson ? "Lưu thay đổi" : "Tạo bài học"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog: Tạo/Sửa bài kiểm tra */}
+      {/* Dialog: Tạo/Sửa bài kiểm tra (Giữ nguyên như cũ) */}
       <Dialog open={showExamDialog} onOpenChange={setShowExamDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -481,7 +612,7 @@ const addQuestion = () => setQuestionList([...questionList, emptyQuestion()]);
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold text-slate-700">Câu hỏi & Đáp án</Label>
                 <Button type="button" size="sm" variant="outline"
-className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                  className="text-purple-600 border-purple-300 hover:bg-purple-50"
                   onClick={addQuestion}>
                   <PlusCircle className="mr-1 h-3 w-3" /> Thêm câu
                 </Button>
@@ -530,7 +661,7 @@ className="text-purple-600 border-purple-300 hover:bg-purple-50"
             <Button variant="outline" onClick={() => setShowExamDialog(false)}>Hủy</Button>
             <Button className="bg-purple-600 hover:bg-purple-700"
               disabled={!examForm.title || !examForm.subject}
-onClick={handleSaveExam}>
+              onClick={handleSaveExam}>
               {editExam ? "Lưu thay đổi" : "Tạo bài kiểm tra"}
             </Button>
           </DialogFooter>
@@ -538,4 +669,4 @@ onClick={handleSaveExam}>
       </Dialog>
     </div>
   );
-} 
+}
