@@ -59,9 +59,6 @@ const fakeNotifications = [
   { id: 2, title: "Cập nhật lịch thi", content: "Lịch kiểm tra điều kiện môn Trí Tuệ Nhân Tạo đã được dời sang tuần sau phòng B301.", date: "02/07/2026" },
 ];
 
-// ------------------------------------
-// Dữ liệu Chương & Bài học cho từng môn
-// ------------------------------------
 const AI_LESSONS_DATA = [
   {
     chapter: "Chương 1: Tổng quan về Trí tuệ nhân tạo (AI)",
@@ -99,7 +96,6 @@ const NW_LESSONS_DATA = [
   }
 ];
 
-// Hàm trả về nội dung học tập chi tiết (gồm I La Mã, II La Mã, ý a, ý b đổi mới nội dung liên tục)
 const getLessonContentDetails = (lessonId: string, lessonTitle: string) => {
   switch (lessonId) {
     case "ai-1-1":
@@ -153,7 +149,6 @@ const getLessonContentDetails = (lessonId: string, lessonTitle: string) => {
           ]
         }
       ];
-    // Nội dung mặc định tự động tạo ra cho các bài học khác để bài nào cũng bấm được và hiển thị chuẩn cấu trúc
     default:
       return [
         {
@@ -174,7 +169,20 @@ const getLessonContentDetails = (lessonId: string, lessonTitle: string) => {
   }
 };
 
-const DS_QUESTIONS = [
+// 🚀 Đã sửa: Thêm interface rõ ràng cho Question để loại bỏ chữ 'any'
+interface QuestionOption {
+  id: string;
+  text: string;
+}
+
+interface ExamQuestion {
+  id: number;
+  content: string;
+  correctOptionId: string;
+  options: QuestionOption[];
+}
+
+const DS_QUESTIONS: ExamQuestion[] = [
   { id: 1, content: "Câu 1: Bài toán Phân loại (Classification) thuộc nhóm học máy nào?", correctOptionId: "opt1", options: [
     { id: "opt1", text: "A. Học có giám sát (Supervised Learning)" }, { id: "opt2", text: "B. Học không giám sát (Unsupervised Learning)" }, { id: "opt3", text: "C. Học bán giám sát (Semi-supervised Learning)" }, { id: "opt4", text: "D. Học tăng cường (Reinforcement Learning)" }
   ]},
@@ -183,7 +191,7 @@ const DS_QUESTIONS = [
   ]}
 ];
 
-const SQ_QUESTIONS = [
+const SQ_QUESTIONS: ExamQuestion[] = [
   { id: 1, content: "Câu 1: Cấu trúc dữ liệu Stack (Ngăn xếp) hoạt động theo nguyên tắc nào?", correctOptionId: "opt1", options: [
     { id: "opt1", text: "A. LIFO (Last In First Out)" }, { id: "opt2", text: "B. FIFO (First In First Out)" }, { id: "opt3", text: "C. FILO (First In Last Out)" }, { id: "opt4", text: "D. Cả A và C đều đúng" }
   ]},
@@ -192,7 +200,7 @@ const SQ_QUESTIONS = [
   ]}
 ];
 
-const GENERIC_QUESTIONS = [{ id: 1, content: "Câu hỏi hệ thống đang cập nhật...", correctOptionId: "opt1", options: [{ id: "opt1", text: "Đang cập nhật" }]}];
+const GENERIC_QUESTIONS: ExamQuestion[] = [{ id: 1, content: "Câu hỏi hệ thống đang cập nhật...", correctOptionId: "opt1", options: [{ id: "opt1", text: "Đang cập nhật" }]}];
 
 type AvailableClass = (typeof fakeAvailableClasses)[0];
 type MyExam         = (typeof fakeMyExams)[0];
@@ -210,15 +218,14 @@ export default function SinhVienDashboard() {
 
   const [isTakingExam, setIsTakingExam]       = useState(false);
   const [answers, setAnswers]                 = useState<Record<number, string>>({});
-  const [currentExamQuestions, setCurrentExamQuestions] = useState<any[]>([]);
+  
+  // 🚀 Đã sửa: Truyền Type ExamQuestion vào đây thay vì any
+  const [currentExamQuestions, setCurrentExamQuestions] = useState<ExamQuestion[]>([]);
 
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [showEnrollToast, setShowEnrollToast] = useState(false);
 
-  // State theo dõi xem người dùng có đang bấm vào học lớp nào không
   const [insideClassLessons, setInsideClassLessons] = useState<AvailableClass | null>(null);
-  
-  // CHỨC NĂNG MỚI: Quản lý bài học cụ thể đang được bấm chọn để xem nội dung
   const [readingLesson, setReadingLesson] = useState<{ id: string; title: string; type: string } | null>(null);
 
   const handleEnroll = (id: number) => {
@@ -284,7 +291,6 @@ export default function SinhVienDashboard() {
     { label: "Điểm TB tích lũy", value: avgScore.toFixed(1), icon: <BarChart2     className="h-5 w-5 text-purple-500"  /> },
   ];
 
-  // Giao diện khi sinh viên làm bài thi trắc nghiệm
   if (isTakingExam && selectedExam) {
     return (
       <div className="min-h-screen bg-slate-50 p-6 relative">
@@ -321,7 +327,8 @@ export default function SinhVienDashboard() {
                   <CardTitle className="text-base font-semibold leading-relaxed">{question.content}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-2">
-                  {question.options.map((opt: any) => (
+                  {/* 🚀 Đã sửa: Xóa dòng (opt: any) nguy hiểm, TypeScript sẽ tự nhận diện */}
+                  {question.options.map((opt) => (
                     <button
                       key={opt.id}
                       onClick={() => setAnswers({ ...answers, [question.id]: opt.id })}
@@ -349,14 +356,12 @@ export default function SinhVienDashboard() {
     );
   }
 
-  // CHỨC NĂNG MỚI: Trang hiển thị nội dung bài học chi tiết khi bấm chọn vào bài
   if (readingLesson && insideClassLessons) {
     const lessonContent = getLessonContentDetails(readingLesson.id, readingLesson.title);
 
     return (
       <div className="min-h-screen bg-slate-50 p-6">
         <div className="mx-auto max-w-4xl space-y-6">
-          {/* Header điều hướng quay lại */}
           <div className="bg-white p-6 rounded-lg border shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center">
             <div>
               <button 
@@ -377,7 +382,6 @@ export default function SinhVienDashboard() {
             </div>
           </div>
 
-          {/* Render Nội dung cấu trúc I La Mã và II La Mã */}
           <div className="space-y-6">
             {lessonContent.map((section, idx) => (
               <Card key={idx} className="border shadow-sm overflow-hidden">
@@ -402,7 +406,6 @@ export default function SinhVienDashboard() {
             ))}
           </div>
 
-          {/* Footer xác nhận hoàn thành */}
           <div className="flex justify-between items-center bg-white p-4 rounded-lg border shadow-sm">
             <span className="text-xs text-slate-400">Đọc kỹ kiến thức trước khi đóng trang tài liệu</span>
             <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setReadingLesson(null)}>
@@ -414,7 +417,6 @@ export default function SinhVienDashboard() {
     );
   }
 
-  // Giao diện danh sách bài học của lớp khi bấm nút "Vào học"
   if (insideClassLessons) {
     const lessonsData = insideClassLessons.code === "CS301-01" ? AI_LESSONS_DATA :
                         insideClassLessons.code === "DS201-01" ? DS_LESSONS_DATA :
@@ -453,7 +455,7 @@ export default function SinhVienDashboard() {
                       {chapterData.lessons.map((lesson) => (
                         <div 
                           key={lesson.id} 
-                          onClick={() => setReadingLesson(lesson)} // BẤM VÀO BÀI HỌC BẤT KỲ ĐỂ XEM CHI TIẾT
+                          onClick={() => setReadingLesson(lesson)}
                           className="p-4 flex items-start justify-between gap-4 hover:bg-blue-50/40 cursor-pointer transition-all group"
                         >
                           <div className="flex items-start gap-3">
@@ -519,7 +521,6 @@ export default function SinhVienDashboard() {
           </div>
         </div>
 
-        {/* Thống kê */}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {stats.map(s => (
             <Card key={s.label}>
@@ -534,7 +535,6 @@ export default function SinhVienDashboard() {
           ))}
         </div>
 
-        {/* Tab Menu */}
         <div className="flex flex-wrap gap-2">
           {([
             { key: "classes", label: "Đăng Ký Lớp Học", icon: <PlusCircle className="h-4 w-4" />, visible: true },
@@ -551,7 +551,6 @@ export default function SinhVienDashboard() {
           ))}
         </div>
 
-        {/* Tab 1: Đăng ký lớp học */}
         {activeTab === "classes" && (
           <Card>
             <CardHeader><CardTitle className="text-base">Danh Sách Lớp Học Mở Đăng Ký</CardTitle></CardHeader>
@@ -592,7 +591,6 @@ export default function SinhVienDashboard() {
           </Card>
         )}
 
-        {/* Tab 2: Lớp học của tôi */}
         {activeTab === "my-classes" && (
           <Card>
             <CardHeader><CardTitle className="text-base">Lớp Học Đã Đăng Ký</CardTitle></CardHeader>
@@ -620,7 +618,6 @@ export default function SinhVienDashboard() {
           </Card>
         )}
 
-        {/* Tab 3: Thông báo */}
         {activeTab === "notifications" && (
           <Card>
             <CardHeader><CardTitle className="text-base">Thông Báo Hệ Thống</CardTitle></CardHeader>
@@ -641,7 +638,6 @@ export default function SinhVienDashboard() {
           </Card>
         )}
 
-        {/* Tab 4: Bài kiểm tra */}
         {activeTab === "exams" && enrolledCount > 0 && (
           <Card>
             <CardHeader><CardTitle className="text-base">Bài Kiểm Tra Học Phần</CardTitle></CardHeader>
@@ -686,7 +682,6 @@ export default function SinhVienDashboard() {
           </Card>
         )}
 
-        {/* Tab 5: Bảng điểm */}
         {activeTab === "grades" && enrolledCount > 0 && (
           <Card>
             <CardHeader><CardTitle className="text-base">Bảng Điểm Học Tập</CardTitle></CardHeader>
@@ -720,7 +715,6 @@ export default function SinhVienDashboard() {
         )}
       </div>
 
-      {/* Dialog: Chi Tiết Lớp Học */}
       <Dialog open={showClassDetail} onOpenChange={setShowClassDetail}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Thông tin chi tiết lớp học</DialogTitle></DialogHeader>
@@ -750,7 +744,6 @@ export default function SinhVienDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: Xác nhận làm bài thi */}
       <Dialog open={showExamDialog} onOpenChange={setShowExamDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Xác nhận làm bài</DialogTitle></DialogHeader>

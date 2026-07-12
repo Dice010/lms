@@ -1,36 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
-import { Plus, Users, BookOpen, UserPlus, Check, X, GraduationCap, Building, Clock } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Plus, Users, BookOpen, UserPlus, Check, X, Clock } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+
+// Lấy Server Actions từ hạ tầng ổn định mới
+import { getCourses, createCourse, updateCourseStatus } from "@/app/actions/course-actions";
+import { Course } from "@prisma/client";
+
+// --- CÀI ĐẶT BỘ CẢM BIẾN NHẬN ROLE TỪ DASHBOARD ---
+interface AcademicManagementProps {
+  currentRole?: string;
+}
 
 // --- Type Definitions ---
 interface ClassInfo {
@@ -41,39 +28,12 @@ interface ClassInfo {
   maxCapacity: number;
 }
 
-interface Subject {
-  id: string;
-  name: string;
-  credits: number;
-  assignedTeacher: string | null;
-}
+type UICourse = Course & { assignedTeacher?: string | null };
 
-interface NewSubject {
-  id: string;
-  code: string;
-  name: string;
-  credits: number;
-  status: "Pending" | "Approved" | "Rejected";
-  proposer: string;
-}
-
-// --- Initial Mock Data ---
 const initialClasses: ClassInfo[] = [
   { id: "CLS001", name: "SE2026_A", major: "Kỹ thuật phần mềm", studentCount: 35, maxCapacity: 40 },
   { id: "CLS002", name: "CS2026_B", major: "Khoa học máy tính", studentCount: 40, maxCapacity: 40 },
   { id: "CLS003", name: "AI2026_C", major: "Trí tuệ nhân tạo", studentCount: 28, maxCapacity: 35 },
-];
-
-const initialSubjects: Subject[] = [
-  { id: "SUBJ101", name: "Cấu trúc dữ liệu và giải thuật", credits: 3, assignedTeacher: "TS. Nguyễn Văn A" },
-  { id: "SUBJ102", name: "Cơ sở dữ liệu", credits: 3, assignedTeacher: null },
-  { id: "SUBJ103", name: "Mạng máy tính", credits: 3, assignedTeacher: null },
-];
-
-const initialNewSubjects: NewSubject[] = [
-  { id: "NS01", code: "AI301", name: "Học máy ứng dụng", credits: 3, status: "Pending", proposer: "TBM Trí tuệ nhân tạo" },
-  { id: "NS02", code: "SE402", name: "Kiểm thử phần mềm nâng cao", credits: 4, status: "Approved", proposer: "TBM Kỹ thuật phần mềm" },
-  { id: "NS03", code: "CS105", name: "Nhập môn điện toán đám mây", credits: 3, status: "Pending", proposer: "TBM Khoa học máy tính" },
 ];
 
 const mockTeachers = [
@@ -83,11 +43,27 @@ const mockTeachers = [
   "TS. Phạm Minh D"
 ];
 
-export default function AcademicManagement() {
+// 🚀 ĐÓN ROLE VÀO COMPONENT
+export default function AcademicManagement({ currentRole = "PHONG_DAO_TAO" }: AcademicManagementProps) {
   // --- States ---
   const [classes, setClasses] = useState<ClassInfo[]>(initialClasses);
-  const [subjects, setSubjects] = useState<Subject[]>(initialSubjects);
-  const [newSubjects, setNewSubjects] = useState<NewSubject[]>(initialNewSubjects);
+  const [subjects, setSubjects] = useState<UICourse[]>([]);
+
+  const loadDatabaseData = useCallback(async () => {
+    try {
+      const data = await getCourses();
+      setSubjects(data);
+    } catch (error) {
+      console.error("Lỗi lấy danh sách khóa học từ DB:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const initFetch = async () => {
+      await loadDatabaseData();
+    };
+    initFetch();
+  }, [loadDatabaseData]);
 
   // States Form Tạo Lớp
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
@@ -99,11 +75,10 @@ export default function AcademicManagement() {
   const [isSubjectDialogOpen, setIsSubjectDialogOpen] = useState(false);
   const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectName, setNewSubjectName] = useState("");
-  const [newSubjectCredits, setNewSubjectCredits] = useState("");
 
   // States Form Phân Công Giảng Viên
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(null);
   const [chosenTeacher, setChosenTeacher] = useState("");
 
   const [toastMessage, setToastMessage] = useState("");
@@ -133,29 +108,30 @@ export default function AcademicManagement() {
     setTimeout(() => setToastMessage(""), 3000);
   };
 
-  const handleProposeSubject = () => {
-    if (!newSubjectCode || !newSubjectName || !newSubjectCredits) {
+  const handleProposeSubject = async () => {
+    if (!newSubjectCode || !newSubjectName) {
       alert("Vui lòng nhập đầy đủ thông tin môn học!");
       return;
     }
 
-    const newSub: NewSubject = {
-      id: `NS0${newSubjects.length + 1}`,
-      code: newSubjectCode.toUpperCase(),
-      name: newSubjectName,
-      credits: parseInt(newSubjectCredits),
-      status: "Pending",
-      proposer: "TBM Kỹ thuật phần mềm", 
-    };
+    try {
+      await createCourse({
+        title: newSubjectName,
+        subject: newSubjectCode.toUpperCase()
+      });
 
-    setNewSubjects([newSub, ...newSubjects]);
-    setIsSubjectDialogOpen(false);
-    setNewSubjectCode("");
-    setNewSubjectName("");
-    setNewSubjectCredits("");
+      await loadDatabaseData();
+      setIsSubjectDialogOpen(false);
+      setNewSubjectCode("");
+      setNewSubjectName("");
 
-    setToastMessage(`Thành công! Đã gửi đề xuất môn ${newSub.name}.`);
-    setTimeout(() => setToastMessage(""), 3000);
+      setToastMessage(`Đã gửi đề xuất môn học: ${newSubjectName}`);
+      setTimeout(() => setToastMessage(""), 3000);
+      
+    } catch (error) {
+      console.error(error);
+      alert("Có lỗi xảy ra khi lưu vào database!");
+    }
   };
 
   const handleSaveAssignment = () => {
@@ -173,93 +149,61 @@ export default function AcademicManagement() {
     setTimeout(() => setToastMessage(""), 3000);
   };
 
-  const handleApproveSubject = (id: string) => {
-    setNewSubjects((prevSubjects) =>
-      prevSubjects.map((subject) =>
-        subject.id === id ? { ...subject, status: "Approved" } : subject
-      )
-    );
+  const handleApproveSubject = async (id: number) => {
+    try {
+      await updateCourseStatus(id, "Đã công bố");
+      await loadDatabaseData();
+      setToastMessage("Đã phê duyệt môn học áp dụng toàn trường!");
+      setTimeout(() => setToastMessage(""), 3000);
+    } catch (error) {
+      console.error(error);
+      alert("Duyệt môn thất bại!");
+    }
   };
 
-  const handleRejectSubject = (id: string) => {
-    setNewSubjects((prevSubjects) =>
-      prevSubjects.map((subject) =>
-        subject.id === id ? { ...subject, status: "Rejected" } : subject
-      )
-    );
+  const handleRejectSubject = async (id: number) => {
+    try {
+      await updateCourseStatus(id, "Từ chối");
+      await loadDatabaseData();
+      setToastMessage("Đã từ chối áp dụng môn học đề xuất.");
+      setTimeout(() => setToastMessage(""), 3000);
+    } catch (error) {
+      console.error(error);
+      alert("Từ chối môn thất bại!");
+    }
   };
 
   return (
-    // Sử dụng flex-row và flex-nowrap để bắt buộc dàn thành 2 cột ngang
-    <Tabs defaultValue="pdt" className="flex flex-row flex-nowrap w-full h-screen overflow-hidden bg-slate-50" orientation="vertical">
+    <div className="w-full animate-in fade-in duration-500">
       
-      {/* ========================================= */}
-      {/* CỘT TRÁI: SIDEBAR MENU VAI TRÒ            */}
-      {/* ========================================= */}
-      <div className="w-64 bg-white border-r shrink-0 flex flex-col shadow-sm z-10 h-full overflow-y-auto">
-        <div className="py-6">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-6 block">
-            Lựa Chọn Vai Trò
-          </span>
-          
-          <TabsList className="flex flex-col h-auto bg-transparent space-y-0 p-0 w-full items-start rounded-none">
-            <TabsTrigger 
-              value="pdt" 
-              className="flex w-full items-center justify-start gap-3 px-6 py-4 text-sm font-medium text-slate-600 bg-transparent border-l-4 border-transparent rounded-none transition-none hover:bg-slate-50 hover:text-slate-900 data-[state=active]:border-blue-600 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-none"
-            >
-              <Building className="h-5 w-5" />
-              Phòng Đào Tạo
-            </TabsTrigger>
-            
-            <TabsTrigger 
-              value="tbm" 
-              className="flex w-full items-center justify-start gap-3 px-6 py-4 text-sm font-medium text-slate-600 bg-transparent border-l-4 border-transparent rounded-none transition-none hover:bg-slate-50 hover:text-slate-900 data-[state=active]:border-blue-600 data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:shadow-none"
-            >
-              <GraduationCap className="h-5 w-5" />
-              Trưởng Bộ Môn
-            </TabsTrigger>
-          </TabsList>
-        </div>
-      </div>
-
-      {/* ========================================= */}
-      {/* CỘT PHẢI: NỘI DUNG CHÍNH                  */}
-      {/* ========================================= */}
-      <div className="flex-1 w-full h-full overflow-y-auto p-8">
-        
-        {/* Header tổng */}
-        <div className="flex flex-col gap-2 pb-6 mb-6 border-b">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-              <BookOpen className="h-6 w-6" />
+      {/* 🟢 LUỒNG HIỂN THỊ DÀNH RIÊNG CHO PHÒNG ĐÀO TẠO */}
+      {currentRole === "PHONG_DAO_TAO" && (
+        <div className="space-y-6">
+          {/* Tiêu đề */}
+          <div className="flex flex-col gap-2 pb-6 border-b">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg"><BookOpen className="h-6 w-6" /></div>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900">Ban Điều Hành — Phòng Đào Tạo</h1>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Trang Quản Trị — Đào Tạo</h1>
+            <p className="text-muted-foreground ml-12">Quản lý danh sách lớp học và phê duyệt môn học toàn trường.</p>
           </div>
-          <p className="text-muted-foreground ml-12">
-            Hệ thống Quản lý Học tập (LMS) — Phân quyền thao tác chuyên môn.
-          </p>
-        </div>
 
-        {/* TAB 1: PHÒNG ĐÀO TẠO */}
-        <TabsContent value="pdt" className="m-0 space-y-6 focus-visible:outline-none focus-visible:ring-0">
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm ring-1 ring-slate-200">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-xl">Danh sách lớp học</CardTitle>
-                <CardDescription>Quản lý các lớp học và sĩ số sinh viên.</CardDescription>
+                <CardDescription>Quản lý các lớp học và sĩ số sinh viên trường.</CardDescription>
               </div>
-              
               <Dialog open={isClassDialogOpen} onOpenChange={setIsClassDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-slate-900 hover:bg-slate-800">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Tạo lớp mới
+                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <Plus className="mr-2 h-4 w-4" /> Tạo lớp mới
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px]">
                   <DialogHeader>
                     <DialogTitle>Tạo lớp học mới</DialogTitle>
-                    <DialogDescription>Điền thông tin chi tiết để khởi tạo lớp học.</DialogDescription>
+                    <DialogDescription>Điền thông tin chi tiết để khởi tạo lớp học mới.</DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="space-y-2">
@@ -277,7 +221,7 @@ export default function AcademicManagement() {
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setIsClassDialogOpen(false)}>Hủy</Button>
-                    <Button onClick={handleCreateClass}>Lưu thông tin</Button>
+                    <Button onClick={handleCreateClass} className="bg-emerald-600 hover:bg-emerald-700 text-white">Lưu thông tin</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -318,102 +262,106 @@ export default function AcademicManagement() {
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm ring-1 ring-slate-200">
             <CardHeader>
               <CardTitle className="text-xl flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-blue-600" />
-                Danh sách môn học mới đề xuất
+                <BookOpen className="h-5 w-5 text-amber-500" />
+                Danh sách môn học mới chờ phê duyệt
               </CardTitle>
-              <CardDescription>Phê duyệt các môn học mới do các Trưởng bộ môn đề xuất.</CardDescription>
+              <CardDescription>Phê duyệt hoặc từ chối áp dụng môn học do Trưởng Bộ Môn đẩy lên.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-xl border bg-white overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                      <TableHead className="font-semibold text-slate-700">Mã môn</TableHead>
-                      <TableHead className="font-semibold text-slate-700">Tên môn học</TableHead>
-                      <TableHead className="font-semibold text-slate-700 text-center">Số TC</TableHead>
-                      <TableHead className="font-semibold text-slate-700">Người đề xuất</TableHead>
+                      <TableHead className="font-semibold text-slate-700">ID Môn</TableHead>
+                      <TableHead className="font-semibold text-slate-700">Tên môn học đề xuất</TableHead>
+                      <TableHead className="font-semibold text-slate-700 text-center">Mã ngành</TableHead>
                       <TableHead className="font-semibold text-slate-700">Trạng thái</TableHead>
                       <TableHead className="font-semibold text-slate-700 text-right">Thao tác</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {newSubjects.map((subject) => (
-                      <TableRow key={subject.id}>
-                        <TableCell className="font-mono text-sm text-slate-600">{subject.code}</TableCell>
-                        <TableCell className="font-medium text-slate-900">{subject.name}</TableCell>
-                        <TableCell className="text-center text-slate-600">{subject.credits}</TableCell>
-                        <TableCell className="text-sm text-slate-500">{subject.proposer}</TableCell>
-                        <TableCell>
-                          {subject.status === "Approved" ? (
-                            <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 shadow-none">Đã duyệt</Badge>
-                          ) : subject.status === "Rejected" ? (
-                            <Badge variant="destructive" className="shadow-none">Từ chối</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 shadow-none">Chờ duyệt</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button variant="outline" size="icon" className="h-8 w-8" disabled={subject.status !== "Pending"} onClick={() => handleApproveSubject(subject.id)}>
-                            <Check className="h-4 w-4 text-emerald-600" />
-                          </Button>
-                          <Button variant="outline" size="icon" className="h-8 w-8" disabled={subject.status !== "Pending"} onClick={() => handleRejectSubject(subject.id)}>
-                            <X className="h-4 w-4 text-red-600" />
-                          </Button>
+                    {subjects.filter(s => s.status === "Bản nháp").length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-slate-400 py-6 text-sm">
+                          Hiện tại không có đề xuất môn học mới nào chờ phê duyệt.
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      subjects.filter(s => s.status === "Bản nháp").map((subject) => (
+                        <TableRow key={subject.id}>
+                          <TableCell className="font-mono text-sm text-slate-600">MH_{subject.id}</TableCell>
+                          <TableCell className="font-medium text-slate-900">{subject.title}</TableCell>
+                          <TableCell className="text-center font-bold text-blue-600">{subject.subject}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 shadow-none">Chờ duyệt</Badge>
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            <Button variant="outline" size="icon" className="h-8 w-8 hover:bg-emerald-50 border-emerald-200" onClick={() => handleApproveSubject(subject.id)}>
+                              <Check className="h-4 w-4 text-emerald-600" />
+                            </Button>
+                            <Button variant="outline" size="icon" className="h-8 w-8 hover:bg-red-50 border-red-200" onClick={() => handleRejectSubject(subject.id)}>
+                              <X className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* TAB 2: TRƯỞNG BỘ MÔN */}
-        <TabsContent value="tbm" className="m-0 space-y-6 focus-visible:outline-none focus-visible:ring-0">
-          <Card className="border-0 shadow-sm">
+      {/* 🟢 LUỒNG HIỂN THỊ DÀNH RIÊNG CHO TRƯỞNG BỘ MÔN */}
+      {currentRole === "TRUONG_BO_MON" && (
+        <div className="space-y-6">
+          {/* Tiêu đề */}
+          <div className="flex flex-col gap-2 pb-6 border-b">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Users className="h-6 w-6" /></div>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900">Điều Hành Khoa — Trưởng Bộ Môn</h1>
+            </div>
+            <p className="text-muted-foreground ml-12">Đề xuất khung môn học và phân công lịch giảng dạy cho Giảng viên.</p>
+          </div>
+
+          <Card className="border-0 shadow-sm ring-1 ring-slate-200">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-xl flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-blue-600" />
-                    Quản lý & Đề xuất môn học
+                    <BookOpen className="h-5 w-5 text-blue-600" /> Quản lý & Phân công Giảng Viên
                   </CardTitle>
-                  <CardDescription>TBM đề xuất môn học mới và phân công giảng viên giảng dạy.</CardDescription>
+                  <CardDescription>Danh sách các môn học đã được thông qua và phân công nhân sự.</CardDescription>
                 </div>
-                
                 <Dialog open={isSubjectDialogOpen} onOpenChange={setIsSubjectDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button className="bg-slate-900 hover:bg-slate-800">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Đề xuất môn mới
+                    <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                      <Plus className="mr-2 h-4 w-4" /> Đề xuất môn mới
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                       <DialogTitle>Đề xuất môn học mới</DialogTitle>
-                      <DialogDescription>Gửi thông tin môn học lên Phòng Đào Tạo phê duyệt.</DialogDescription>
+                      <DialogDescription>Gửi thông tin môn học lên hệ thống chờ Phòng Đào Tạo phê duyệt.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Mã môn học</label>
+                        <label className="text-sm font-medium">Mã học phần (Chuyên ngành)</label>
                         <Input placeholder="VD: SWE201" value={newSubjectCode} onChange={(e) => setNewSubjectCode(e.target.value)} />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Tên môn học</label>
                         <Input placeholder="VD: Kỹ thuật phần mềm cơ sở" value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Số tín chỉ</label>
-                        <Input type="number" placeholder="VD: 3" value={newSubjectCredits} onChange={(e) => setNewSubjectCredits(e.target.value)} />
-                      </div>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setIsSubjectDialogOpen(false)}>Hủy</Button>
-                      <Button onClick={handleProposeSubject}>Gửi đề xuất</Button>
+                      <Button onClick={handleProposeSubject} className="bg-blue-600 hover:bg-blue-700 text-white">Gửi đề xuất</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -426,97 +374,109 @@ export default function AcademicManagement() {
                     <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
                       <TableHead className="font-semibold text-slate-700">Mã môn</TableHead>
                       <TableHead className="font-semibold text-slate-700">Tên môn học</TableHead>
-                      <TableHead className="font-semibold text-slate-700 text-center">Số tín chỉ</TableHead>
+                      <TableHead className="font-semibold text-slate-700 text-center">Chuyên ngành</TableHead>
                       <TableHead className="font-semibold text-slate-700">Giảng viên phụ trách</TableHead>
                       <TableHead className="font-semibold text-slate-700 text-right">Thao tác</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {subjects.map((subject) => (
-                      <TableRow key={subject.id}>
-                        <TableCell className="font-mono text-sm text-slate-600">{subject.id}</TableCell>
-                        <TableCell className="font-medium text-slate-900">{subject.name}</TableCell>
-                        <TableCell className="text-center text-slate-600">{subject.credits}</TableCell>
-                        <TableCell>
-                          {subject.assignedTeacher ? (
-                            <div className="flex items-center gap-2 text-sm font-medium text-blue-600 bg-blue-50 w-fit px-2.5 py-1 rounded-md">
-                              <Users className="h-4 w-4" />
-                              {subject.assignedTeacher}
-                            </div>
-                          ) : (
-                            <span className="text-sm italic text-slate-400">Chưa phân công</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button 
-                            variant={subject.assignedTeacher ? "outline" : "default"} 
-                            size="sm"
-                            className={!subject.assignedTeacher ? "bg-slate-900 hover:bg-slate-800" : ""}
-                            onClick={() => {
-                              setSelectedSubjectId(subject.id);
-                              setChosenTeacher(subject.assignedTeacher || "");
-                              setIsAssignDialogOpen(true);
-                            }}
-                          >
-                            <UserPlus className="mr-2 h-4 w-4" />
-                            {subject.assignedTeacher ? "Đổi GV" : "Phân công"}
-                          </Button>
+                    {subjects.filter(s => s.status === "Đã công bố").length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-slate-400 py-6 text-sm">
+                          Chưa có môn học nào được phê duyệt áp dụng chính thức.
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      subjects.filter(s => s.status === "Đã công bố").map((subject) => (
+                        <TableRow key={subject.id}>
+                          <TableCell className="font-mono text-sm text-slate-600">MH_{subject.id}</TableCell>
+                          <TableCell className="font-medium text-slate-900">{subject.title}</TableCell>
+                          <TableCell className="text-center font-bold text-slate-600">{subject.subject}</TableCell>
+                          <TableCell>
+                            {subject.assignedTeacher ? (
+                              <div className="flex items-center gap-2 text-sm font-medium text-blue-600 bg-blue-50 w-fit px-2.5 py-1 rounded-md">
+                                <Users className="h-4 w-4" /> {subject.assignedTeacher}
+                              </div>
+                            ) : (
+                              <span className="text-sm italic text-slate-400">Chưa phân công</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button 
+                              variant={subject.assignedTeacher ? "outline" : "default"} 
+                              size="sm"
+                              className={!subject.assignedTeacher ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
+                              onClick={() => {
+                                setSelectedSubjectId(subject.id);
+                                setChosenTeacher(subject.assignedTeacher || "");
+                                setIsAssignDialogOpen(true);
+                              }}
+                            >
+                              <UserPlus className="mr-2 h-4 w-4" />
+                              {subject.assignedTeacher ? "Đổi GV" : "Phân công"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm ring-1 ring-slate-200">
             <CardHeader>
               <CardTitle className="text-xl flex items-center gap-2">
-                <Clock className="h-5 w-5 text-amber-500" />
-                Theo dõi trạng thái môn học đã đề xuất
+                <Clock className="h-5 w-5 text-amber-500" /> Lịch sử đề xuất môn học của bộ môn
               </CardTitle>
-              <CardDescription>Danh sách các môn do ông đề xuất và phản hồi từ Phòng Đào Tạo.</CardDescription>
+              <CardDescription>Bảng theo dõi tiến độ duyệt real-time từ Phòng Đào Tạo.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-xl border bg-white overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-                      <TableHead className="font-semibold text-slate-700">Mã môn</TableHead>
+                      <TableHead className="font-semibold text-slate-700">ID</TableHead>
                       <TableHead className="font-semibold text-slate-700">Tên môn học</TableHead>
-                      <TableHead className="font-semibold text-slate-700 text-center">Số TC</TableHead>
+                      <TableHead className="font-semibold text-slate-700 text-center">Chuyên ngành</TableHead>
                       <TableHead className="font-semibold text-slate-700 text-right">Trạng thái phê duyệt</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {newSubjects.map((sub) => (
-                      <TableRow key={sub.id}>
-                        <TableCell className="font-mono text-sm text-slate-600">{sub.code}</TableCell>
-                        <TableCell className="font-medium text-slate-900">{sub.name}</TableCell>
-                        <TableCell className="text-center text-slate-600">{sub.credits}</TableCell>
-                        <TableCell className="text-right">
-                          {sub.status === "Approved" ? (
-                            <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700 shadow-none">Đồng ý áp dụng</Badge>
-                          ) : sub.status === "Rejected" ? (
-                            <Badge variant="destructive" className="shadow-none">Không phê duyệt</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 shadow-none">Đang chờ xem xét</Badge>
-                          )}
-                        </TableCell>
+                    {subjects.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-slate-400 py-6 text-sm">Chưa có lịch sử đề xuất nào.</TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      subjects.map((sub) => (
+                        <TableRow key={sub.id}>
+                          <TableCell className="font-mono text-sm text-slate-600">MH_{sub.id}</TableCell>
+                          <TableCell className="font-medium text-slate-900">{sub.title}</TableCell>
+                          <TableCell className="text-center font-mono text-sm">{sub.subject}</TableCell>
+                          <TableCell className="text-right">
+                            {sub.status === "Đã công bố" ? (
+                              <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-700 shadow-none">Đã duyệt & Áp dụng</Badge>
+                            ) : sub.status === "Từ chối" ? (
+                              <Badge variant="destructive" className="shadow-none">Bị từ chối</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 shadow-none">Đang xem xét</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </div>
+        </div>
+      )}
 
-      {/* POPUP PHÂN CÔNG GIẢNG VIÊN */}
+      {/* 🟢 POPUP PHÂN CÔNG GIẢNG VIÊN (DÙNG CHUNG) */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Phân công giảng viên</DialogTitle>
             <DialogDescription>Chọn một giảng viên phù hợp thuộc bộ môn để đảm nhận môn học này.</DialogDescription>
@@ -536,20 +496,18 @@ export default function AcademicManagement() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)}>Hủy</Button>
-            <Button onClick={handleSaveAssignment} className="bg-blue-600 hover:bg-blue-700">Xác nhận phân công</Button>
+            <Button onClick={handleSaveAssignment} className="bg-blue-600 hover:bg-blue-700 text-white">Xác nhận phân công</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* UI THÔNG BÁO NỔI TOAST */}
+      {/* UI THÔNG BÁO TOAST */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 animate-in slide-in-from-bottom-5 fade-in z-50">
-          <div className="bg-white/20 p-1 rounded-full">
-            <Check className="h-5 w-5 text-white" />
-          </div>
-          <p className="font-medium">{toastMessage}</p>
+        <div className="fixed bottom-6 right-6 bg-slate-900 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 animate-in slide-in-from-bottom-5 fade-in z-50">
+          <div className="bg-emerald-500/20 p-1 rounded-full"><Check className="h-5 w-5 text-emerald-400" /></div>
+          <p className="font-medium text-sm">{toastMessage}</p>
         </div>
       )}
-    </Tabs>
+    </div>
   );
 }
