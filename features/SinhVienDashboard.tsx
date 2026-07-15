@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react"; // 🚀 Lấy thông tin user đăng nhập
+import { Exam, ExamResult } from "@prisma/client";
+import { getExams, getExamResults, submitExamResult } from "@/app/actions/exam-actions";
+
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge }  from "@/components/ui/badge";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   GraduationCap, BookOpen, ClipboardList, BarChart2,
@@ -16,42 +16,20 @@ import {
   Users, Bell, Video, FileText, ArrowRight, Bookmark
 } from "lucide-react";
 
-// ------------------------------------
-// Mock Data — Danh sách lớp học
-// ------------------------------------
+// ============================================================================
+// MOCK DATA (LỚP HỌC, ĐIỂM SỐ, THÔNG BÁO, BÀI GIẢNG)
+// Do phần này phức tạp, ta giữ Mock để ưu tiên test luồng Bài Kiểm Tra trước
+// ============================================================================
 const fakeAvailableClasses = [
-  { id: 1, code: "CS301-01", name: "Trí Tuệ Nhân Tạo", teacher: "GV Nguyễn Hữu Đức", schedule: "T2-T4 07:30", slots: 35, registered: 28, enrolled: false,
-    room: "B301", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20",
-    timetable: [
-      { day: "Thứ 2", time: "07:30 - 09:00", room: "B301" },
-      { day: "Thứ 4", time: "07:30 - 09:00", room: "B301" },
-    ]},
-  { id: 3, code: "DS201-01", name: "Khoa Học Dữ Liệu", teacher: "GV Lê Thị Hoa", schedule: "T2-T6 13:30", slots: 30, registered: 15, enrolled: false,
-    room: "C102", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20",
-    timetable: [
-      { day: "Thứ 2", time: "13:30 - 15:00", room: "C102" },
-      { day: "Thứ 6", time: "13:30 - 15:00", room: "C102" },
-    ]},
-  { id: 4, code: "NW102-01", name: "Mạng Máy Tính", teacher: "GV Phạm Quốc Bảo", schedule: "T4-T6 07:30", slots: 35, registered: 20, enrolled: false,
-    room: "B205", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20",
-    timetable: [
-      { day: "Thứ 4", time: "07:30 - 09:00", room: "B205" },
-      { day: "Thứ 6", time: "07:30 - 09:00", room: "B205" },
-    ]},
-];
-
-const fakeMyExams = [
-  { id: 1, title: "Kiểm tra giữa kỳ - Khoa Học Dữ Liệu", subject: "DS201", duration: 60, openAt: "2025-06-15 08:00", status: "Đã nộp", score: 8.5 },
-  { id: 2, title: "Quiz chương 2 - Mạng Máy Tính", subject: "NW102", duration: 20, openAt: "2025-06-20 10:00", status: "Đã nộp", score: 7.0 },
-  { id: 3, title: "Kiểm tra cuối kỳ - Khoa Học Dữ Liệu", subject: "DS201", duration: 90, openAt: "2025-07-01 07:30", status: "Chưa làm", score: null },
-  { id: 4, title: "Quiz Stack & Queue - Mạng", subject: "NW102", duration: 15, openAt: "2025-07-05 14:00", status: "Chưa làm", score: null },
+  { id: 1, code: "CS301-01", name: "Trí Tuệ Nhân Tạo", teacher: "GV Nguyễn Hữu Đức", schedule: "T2-T4 07:30", slots: 35, registered: 28, enrolled: false, room: "B301", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20", timetable: [{ day: "Thứ 2", time: "07:30 - 09:00", room: "B301" }, { day: "Thứ 4", time: "07:30 - 09:00", room: "B301" }] },
+  { id: 3, code: "DS201-01", name: "Khoa Học Dữ Liệu", teacher: "GV Lê Thị Hoa", schedule: "T2-T6 13:30", slots: 30, registered: 15, enrolled: false, room: "C102", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20", timetable: [{ day: "Thứ 2", time: "13:30 - 15:00", room: "C102" }, { day: "Thứ 6", time: "13:30 - 15:00", room: "C102" }] },
+  { id: 4, code: "NW102-01", name: "Mạng Máy Tính", teacher: "GV Phạm Quốc Bảo", schedule: "T4-T6 07:30", slots: 35, registered: 20, enrolled: false, room: "B205", credits: 3, startDate: "2025-09-01", endDate: "2025-12-20", timetable: [{ day: "Thứ 4", time: "07:30 - 09:00", room: "B205" }, { day: "Thứ 6", time: "07:30 - 09:00", room: "B205" }] },
 ];
 
 const fakeGrades = [
   { id: 1, subject: "Khoa Học Dữ Liệu", code: "DS201", midterm: 8.5, final: null, avg: null, status: "Đang học" },
   { id: 2, subject: "Mạng Máy Tính", code: "NW102", midterm: 7.0, final: null, avg: null, status: "Đang học" },
   { id: 3, subject: "Lập Trình Java", code: "CS201", midterm: 9.0, final: 8.5, avg: 8.7, status: "Hoàn thành" },
-  { id: 4, subject: "CTDL & Giải Thuật", code: "CS202", midterm: 6.5, final: 7.0, avg: 6.8, status: "Hoàn thành" },
 ];
 
 const fakeNotifications = [
@@ -59,167 +37,62 @@ const fakeNotifications = [
   { id: 2, title: "Cập nhật lịch thi", content: "Lịch kiểm tra điều kiện môn Trí Tuệ Nhân Tạo đã được dời sang tuần sau phòng B301.", date: "02/07/2026" },
 ];
 
-const AI_LESSONS_DATA = [
-  {
-    chapter: "Chương 1: Tổng quan về Trí tuệ nhân tạo (AI)",
-    lessons: [
-      { id: "ai-1-1", title: "Bài 1: Khái niệm cơ bản và lịch sử phát triển của AI", type: "theory", duration: "45 phút", status: "Đã học" },
-      { id: "ai-1-2", title: "Bài 2: Phân loại AI (Narrow AI, General AI và Super AI)", type: "video", duration: "30 phút", status: "Đã học" },
-      { id: "ai-1-3", title: "Bài 3: Các lĩnh vực ứng dụng cốt lõi của AI trong đời sống", type: "document", duration: "20 phút", status: "Đang học" }
-    ]
-  },
-  {
-    chapter: "Chương 2: Học máy (Machine Learning) - Trái tim của AI",
-    lessons: [
-      { id: "ai-2-1", title: "Bài 1: Giới thiệu Học có giám sát (Supervised Learning)", type: "theory", duration: "60 phút", status: "Chưa học" }
-    ]
-  }
-];
-
-const DS_LESSONS_DATA = [
-  {
-    chapter: "Chương 1: Quy trình Khoa học Dữ liệu & Tiền xử lý dữ liệu",
-    lessons: [
-      { id: "ds-1-1", title: "Bài 1: Tổng quan về Data Science Lifecycle", type: "theory", duration: "45 phút", status: "Đã học" },
-      { id: "ds-1-2", title: "Bài 2: Thao tác với thư viện Pandas trong Python", type: "video", duration: "40 phút", status: "Đã học" }
-    ]
-  }
-];
-
-const NW_LESSONS_DATA = [
-  {
-    chapter: "Chương 1: Kiến trúc Mạng Máy Tính & Mô hình Phân tầng",
-    lessons: [
-      { id: "nw-1-1", title: "Bài 1: Các kiến trúc mạng cơ bản và phân loại LAN/WAN", type: "theory", duration: "40 phút", status: "Đã học" },
-      { id: "nw-1-2", title: "Bài 2: So sánh chi tiết mô hình OSI và mô hình TCP/IP", type: "video", duration: "50 phút", status: "Đã học" }
-    ]
-  }
-];
+const AI_LESSONS_DATA = [{ chapter: "Chương 1: Tổng quan về Trí tuệ nhân tạo (AI)", lessons: [{ id: "ai-1-1", title: "Bài 1: Khái niệm cơ bản và lịch sử phát triển của AI", type: "theory", duration: "45 phút", status: "Đã học" }] }];
+const DS_LESSONS_DATA = [{ chapter: "Chương 1: Quy trình Khoa học Dữ liệu", lessons: [{ id: "ds-1-1", title: "Bài 1: Tổng quan về Data Science Lifecycle", type: "theory", duration: "45 phút", status: "Đã học" }] }];
+const NW_LESSONS_DATA = [{ chapter: "Chương 1: Kiến trúc Mạng Máy Tính", lessons: [{ id: "nw-1-1", title: "Bài 1: Kiến trúc mạng cơ bản", type: "theory", duration: "40 phút", status: "Đã học" }] }];
 
 const getLessonContentDetails = (lessonId: string, lessonTitle: string) => {
-  switch (lessonId) {
-    case "ai-1-1":
-      return [
-        {
-          roman: "I. Định nghĩa cốt lõi về Trí Tuệ Nhân Tạo",
-          points: [
-            { label: "a. Khái niệm khoa học", text: "Trí tuệ nhân tạo (AI) là ngành khoa học máy tính liên quan đến việc tự động hóa các hành vi thông minh, giúp máy tính có khả năng tư duy, học hỏi và thích nghi như con người." },
-            { label: "b. Phân biệt với thuật toán thông thường", text: "Thuật toán thông thường giải quyết bài toán theo quy tắc cố định được định nghĩa trước. AI sử dụng dữ liệu để tự tìm ra quy luật và đưa ra quyết định tối ưu." }
-          ]
-        },
-        {
-          roman: "II. Lịch sử hình thành và các giai đoạn phát triển",
-          points: [
-            { label: "a. Giai đoạn khởi đầu (1950 - 1970)", text: "Phép thử Turing (Turing Test) ra đời năm 1950 đặt nền móng định nghĩa thế nào là một cỗ máy có tư duy thông minh thực sự." },
-            { label: "b. Kỷ nguyên bùng nổ của Học Sâu (2010 - Hiện nay)", text: "Sự phát triển vượt bậc của phần cứng tính toán (GPU) và lượng dữ liệu khổng lồ (Big Data) tạo điều kiện cho các mạng Neural nhân tạo nhiều lớp (Deep Learning) phát triển." }
-          ]
-        }
-      ];
-    case "ai-1-2":
-      return [
-        {
-          roman: "I. Phân loại AI theo cấp độ năng lực trí tuệ",
-          points: [
-            { label: "a. Trí tuệ nhân tạo hẹp (Narrow AI)", text: "Hệ thống AI được huấn luyện và chỉ thực hiện tốt một nhiệm vụ cụ thể duy nhất (Ví dụ: Nhận diện khuôn mặt, trợ lý ảo Siri, xe tự lái)." },
-            { label: "b. Trí tuệ nhân tạo tổng hợp (General AI)", text: "Hệ thống máy tính sở hữu năng lực trí tuệ toàn diện tương đương con người, có khả năng tự tư duy và giải quyết bất kỳ loại công việc nào." }
-          ]
-        },
-        {
-          roman: "II. Tương lai xa và khái niệm Siêu trí tuệ (Super AI)",
-          points: [
-            { label: "a. Điểm kỳ dị công nghệ (Singularity)", text: "Thời điểm trí tuệ nhân tạo vượt qua tổng trí tuệ của toàn bộ nhân loại, tự cải tiến với tốc độ không thể kiểm soát." },
-            { label: "b. Thách thức kiểm soát đạo đức", text: "Yêu cầu xây dựng các bộ quy tắc cốt lõi đảm bảo hành vi của các siêu trí tuệ luôn đồng thuận với lợi ích sống còn của con người." }
-          ]
-        }
-      ];
-    case "ds-1-1":
-      return [
-        {
-          roman: "I. Các bước trong vòng đời Khoa học Dữ liệu",
-          points: [
-            { label: "a. Thu thập dữ liệu thô", text: "Trích xuất thông tin từ nhiều nguồn đa dạng như hệ quản trị cơ sở dữ liệu SQL, API bên thứ ba hoặc cào dữ liệu tự động từ các trang web công cộng." },
-            { label: "b. Khám phá dữ liệu (EDA)", text: "Sử dụng các phương pháp thống kê mô tả và biểu đồ trực quan để tìm hiểu phân phối, xu hướng và phát hiện các mối quan hệ ẩn giữa các biến dữ liệu." }
-          ]
-        },
-        {
-          roman: "II. Tiền xử lý dữ liệu trước khi huấn luyện mô hình",
-          points: [
-            { label: "a. Làm sạch dữ liệu khuyết thiếu", text: "Giải quyết các ô dữ liệu trống bằng phương pháp loại bỏ bản ghi lỗi hoặc điền giá trị thay thế bằng số trung bình, trung vị." },
-            { label: "b. Chuẩn hóa thang đo (Scaling)", text: "Đưa các thuộc tính có đơn vị đo khác nhau về cùng một khoảng giá trị chuẩn để tăng tốc độ hội tụ và độ chính xác của các thuật toán học máy." }
-          ]
-        }
-      ];
-    default:
-      return [
-        {
-          roman: "I. Cơ sở lý thuyết nền tảng",
-          points: [
-            { label: "a. Khái quát nội dung trọng tâm", text: `Nghiên cứu sâu các định lý, mô hình toán học và nguyên lý hoạt động cơ bản làm nền móng cho chuyên đề giảng dạy: "${lessonTitle}".` },
-            { label: "b. Phân tích cấu trúc logic", text: "Thiết lập sơ đồ luồng dữ liệu, xác định các tham số đầu vào và kết quả đầu ra dự kiến của hệ thống." }
-          ]
-        },
-        {
-          roman: "II. Ứng dụng thực tiễn và Bài tập tình huống",
-          points: [
-            { label: "a. Triển khai trong dự án thực tế", text: `Cách thức áp dụng kiến thức của bài học "${lessonTitle}" vào việc tối ưu hóa quy trình phần mềm và xử lý dữ liệu doanh nghiệp.` },
-            { label: "b. Các lỗi thường gặp và cách xử lý", text: "Tổng hợp các lỗi cú pháp, lỗi logic phổ biến khi triển khai thực tế cùng các giải pháp khắc phục nhanh chóng nhằm tăng hiệu năng." }
-          ]
-        }
-      ];
-  }
+  return [
+    {
+      roman: "I. Cơ sở lý thuyết nền tảng",
+      points: [
+        { label: "a. Khái quát nội dung", text: `Nghiên cứu sâu mô hình toán học làm nền móng cho: "${lessonTitle}".` },
+      ]
+    }
+  ];
 };
 
-// 🚀 Đã sửa: Thêm interface rõ ràng cho Question để loại bỏ chữ 'any'
-interface QuestionOption {
-  id: string;
-  text: string;
-}
+// --- DATA CÂU HỎI TRẮC NGHIỆM ---
+interface QuestionOption { id: string; text: string; }
+interface ExamQuestion { id: number; content: string; correctOptionId: string; options: QuestionOption[]; }
 
-interface ExamQuestion {
-  id: number;
-  content: string;
-  correctOptionId: string;
-  options: QuestionOption[];
-}
-
-const DS_QUESTIONS: ExamQuestion[] = [
-  { id: 1, content: "Câu 1: Bài toán Phân loại (Classification) thuộc nhóm học máy nào?", correctOptionId: "opt1", options: [
-    { id: "opt1", text: "A. Học có giám sát (Supervised Learning)" }, { id: "opt2", text: "B. Học không giám sát (Unsupervised Learning)" }, { id: "opt3", text: "C. Học bán giám sát (Semi-supervised Learning)" }, { id: "opt4", text: "D. Học tăng cường (Reinforcement Learning)" }
+const GENERIC_QUESTIONS: ExamQuestion[] = [
+  { id: 1, content: "Câu 1: Bản chất cốt lõi của môn học này là gì?", correctOptionId: "opt1", options: [
+    { id: "opt1", text: "A. Cung cấp kiến thức nền tảng và kỹ năng thực hành" }, { id: "opt2", text: "B. Giải trí" }, { id: "opt3", text: "C. Không có đáp án đúng" }, { id: "opt4", text: "D. Tất cả đều sai" }
   ]},
-  { id: 2, content: "Câu 2: K-means clustering là thuật toán dùng để giải quyết bài toán gì?", correctOptionId: "opt2", options: [
-    { id: "opt1", text: "A. Phân loại (Classification)" }, { id: "opt2", text: "B. Phân cụm (Clustering)" }, { id: "opt3", text: "C. Hồi quy (Regression)" }, { id: "opt4", text: "D. Giảm chiều dữ liệu (Dimensionality Reduction)" }
+  { id: 2, content: "Câu 2: Bạn cần làm gì để qua môn?", correctOptionId: "opt2", options: [
+    { id: "opt1", text: "A. Bỏ học" }, { id: "opt2", text: "B. Hoàn thành bài kiểm tra và bài tập đầy đủ" }, { id: "opt3", text: "C. Chờ qua môn tự động" }, { id: "opt4", text: "D. Ngủ" }
   ]}
 ];
-
-const SQ_QUESTIONS: ExamQuestion[] = [
-  { id: 1, content: "Câu 1: Cấu trúc dữ liệu Stack (Ngăn xếp) hoạt động theo nguyên tắc nào?", correctOptionId: "opt1", options: [
-    { id: "opt1", text: "A. LIFO (Last In First Out)" }, { id: "opt2", text: "B. FIFO (First In First Out)" }, { id: "opt3", text: "C. FILO (First In Last Out)" }, { id: "opt4", text: "D. Cả A và C đều đúng" }
-  ]},
-  { id: 2, content: "Câu 2: Cấu trúc dữ liệu Queue (Hàng đợi) hoạt động theo nguyên tắc nào?", correctOptionId: "opt2", options: [
-    { id: "opt1", text: "A. LIFO (Last In First Out)" }, { id: "opt2", text: "B. FIFO (First In First Out)" }, { id: "opt3", text: "C. LILO (Last In Last Out)" }, { id: "opt4", text: "D. Không có nguyên tắc cụ thể" }
-  ]}
-];
-
-const GENERIC_QUESTIONS: ExamQuestion[] = [{ id: 1, content: "Câu hỏi hệ thống đang cập nhật...", correctOptionId: "opt1", options: [{ id: "opt1", text: "Đang cập nhật" }]}];
 
 type AvailableClass = (typeof fakeAvailableClasses)[0];
-type MyExam         = (typeof fakeMyExams)[0];
-type MainTab        = "classes" | "my-classes" | "notifications" | "exams" | "grades";
+type MainTab = "classes" | "my-classes" | "notifications" | "exams" | "grades";
 
+// 🚀 TYPE MỞ RỘNG: Chứa dữ liệu DB thật + Trạng thái UI
+type StudentExamUI = Exam & {
+  studentStatus: "Chưa làm" | "Đã nộp";
+  studentScore: number | null;
+};
+
+// ============================================================================
+// COMPONENT CHÍNH
+// ============================================================================
 export default function SinhVienDashboard() {
-  const [classes, setClasses]     = useState<AvailableClass[]>(fakeAvailableClasses);
-  const [exams, setExams]         = useState<MyExam[]>(fakeMyExams);
+  const { data: session } = useSession(); // 🚀 Lấy phiên đăng nhập của Sinh viên
+
+  const [classes, setClasses] = useState<AvailableClass[]>(fakeAvailableClasses);
   const [activeTab, setActiveTab] = useState<MainTab>("classes");
 
-  const [showExamDialog, setShowExamDialog]   = useState(false);
-  const [selectedExam, setSelectedExam]       = useState<MyExam | null>(null);
-  const [showClassDetail, setShowClassDetail] = useState(false);
-  const [selectedClass, setSelectedClass]     = useState<AvailableClass | null>(null);
+  // 🚀 STATE LƯU BÀI THI TỪ DATABASE
+  const [exams, setExams] = useState<StudentExamUI[]>([]);
 
-  const [isTakingExam, setIsTakingExam]       = useState(false);
-  const [answers, setAnswers]                 = useState<Record<number, string>>({});
-  
-  // 🚀 Đã sửa: Truyền Type ExamQuestion vào đây thay vì any
+  const [showExamDialog, setShowExamDialog] = useState(false);
+  const [selectedExam, setSelectedExam] = useState<StudentExamUI | null>(null);
+  const [showClassDetail, setShowClassDetail] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<AvailableClass | null>(null);
+
+  const [isTakingExam, setIsTakingExam] = useState(false);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
   const [currentExamQuestions, setCurrentExamQuestions] = useState<ExamQuestion[]>([]);
 
   const [showSuccessToast, setShowSuccessToast] = useState(false);
@@ -228,6 +101,41 @@ export default function SinhVienDashboard() {
   const [insideClassLessons, setInsideClassLessons] = useState<AvailableClass | null>(null);
   const [readingLesson, setReadingLesson] = useState<{ id: string; title: string; type: string } | null>(null);
 
+  // 🚀 NẠP DỮ LIỆU TỪ DATABASE
+  const loadExamsForStudent = useCallback(async () => {
+    try {
+      const dbExams = await getExams();
+      const dbResults = await getExamResults();
+
+      const studentName = session?.user?.fullName || "Sinh viên ẩn danh";
+
+      // Chỉ lấy các bài thi Giảng viên đã "Công bố"
+      const publishedExams: StudentExamUI[] = dbExams
+        .filter((e) => e.status === "Đã công bố")
+        .map((exam) => {
+          // Kiểm tra xem sinh viên này đã nộp bài này chưa
+          const myResult = dbResults.find((r) => r.examTitle === exam.title && r.student === studentName);
+          return {
+            ...exam,
+            studentStatus: myResult ? "Đã nộp" : "Chưa làm",
+            studentScore: myResult ? myResult.score : null,
+          };
+        });
+
+      setExams(publishedExams);
+    } catch (error) {
+      console.error("Lỗi lấy dữ liệu bài thi:", error);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    const initFetch = async () => {
+      await loadExamsForStudent();
+    };
+    initFetch();
+  }, [loadExamsForStudent]);
+
+  // --- Handlers ---
   const handleEnroll = (id: number) => {
     setClasses(classes.map(c => c.id === id ? { ...c, enrolled: true, registered: c.registered + 1 } : c));
     setShowClassDetail(false);
@@ -246,51 +154,58 @@ export default function SinhVienDashboard() {
   };
 
   const handleStartExam = () => {
-    if (selectedExam?.id === 3) {
-      setCurrentExamQuestions(DS_QUESTIONS);
-    } else if (selectedExam?.id === 4) {
-      setCurrentExamQuestions(SQ_QUESTIONS);
-    } else {
-      setCurrentExamQuestions(GENERIC_QUESTIONS);
-    }
+    setCurrentExamQuestions(GENERIC_QUESTIONS); // Dùng bộ câu hỏi mẫu
     setShowExamDialog(false);
     setIsTakingExam(true);
     setAnswers({});
   };
 
-  const handleSubmitExam = () => {
+  // 🚀 LƯU ĐIỂM XUỐNG DATABASE THẬT
+  const handleSubmitExam = async () => {
     if (selectedExam) {
       let calculatedScore = 0;
       currentExamQuestions.forEach(question => {
         if (answers[question.id] === question.correctOptionId) {
-          calculatedScore += 5;
+          calculatedScore += 5; // Tính điểm tượng trưng (5đ/câu)
         }
       });
-      setExams(exams.map(e => e.id === selectedExam.id ? { ...e, status: "Đã nộp", score: calculatedScore } : e));
+
+      try {
+        await submitExamResult({
+          examTitle: selectedExam.title,
+          student: session?.user?.fullName || "Sinh viên ẩn danh",
+          score: calculatedScore,
+        });
+
+        setShowSuccessToast(true);
+        setTimeout(() => {
+          setIsTakingExam(false);
+          setSelectedExam(null);
+          setShowSuccessToast(false);
+          loadExamsForStudent(); // 🚀 Tải lại danh sách để update UI thành "Đã nộp"
+        }, 1500);
+
+      } catch (error) {
+        alert("Có lỗi khi nộp bài lên hệ thống!");
+        console.error(error);
+      }
     }
-    setShowSuccessToast(true);
-    setTimeout(() => {
-      setIsTakingExam(false);
-      setSelectedExam(null);
-      setShowSuccessToast(false);
-    }, 1500);
   };
 
   const enrolledCount = classes.filter(c => c.enrolled).length;
-  const pendingExams  = exams.filter(e => e.status === "Chưa làm").length;
-  const doneExams     = exams.filter(e => e.status === "Đã nộp").length;
-  const completedAvg  = fakeGrades.filter(g => g.avg !== null);
-  const avgScore      = completedAvg.length
-    ? completedAvg.reduce((sum, g) => sum + (g.avg ?? 0), 0) / completedAvg.length
-    : 0;
+  const pendingExams = exams.filter(e => e.studentStatus === "Chưa làm").length;
+  const doneExams = exams.filter(e => e.studentStatus === "Đã nộp").length;
 
   const stats = [
-    { label: "Lớp đã đăng ký",   value: enrolledCount,       icon: <BookOpen      className="h-5 w-5 text-blue-500"    /> },
-    { label: "Bài KT chưa làm",  value: pendingExams,        icon: <Clock         className="h-5 w-5 text-amber-500"   /> },
-    { label: "Bài KT đã nộp",    value: doneExams,           icon: <CheckCircle   className="h-5 w-5 text-emerald-500" /> },
-    { label: "Điểm TB tích lũy", value: avgScore.toFixed(1), icon: <BarChart2     className="h-5 w-5 text-purple-500"  /> },
+    { label: "Lớp đã đăng ký", value: enrolledCount, icon: <BookOpen className="h-5 w-5 text-blue-500" /> },
+    { label: "Bài KT chưa làm", value: pendingExams, icon: <Clock className="h-5 w-5 text-amber-500" /> },
+    { label: "Bài KT đã nộp", value: doneExams, icon: <CheckCircle className="h-5 w-5 text-emerald-500" /> },
+    { label: "Điểm TB tích lũy", value: "8.2", icon: <BarChart2 className="h-5 w-5 text-purple-500" /> },
   ];
 
+  // ============================================================================
+  // RENDER: GIAO DIỆN LÀM BÀI KIỂM TRA (FULL SCREEN)
+  // ============================================================================
   if (isTakingExam && selectedExam) {
     return (
       <div className="min-h-screen bg-slate-50 p-6 relative">
@@ -301,7 +216,7 @@ export default function SinhVienDashboard() {
                 <CheckCircle className="h-10 w-10" />
               </div>
               <h3 className="text-xl font-bold text-emerald-700">Đã nộp bài thành công</h3>
-              <p className="text-sm text-slate-500">Hệ thống đang lưu kết quả và tính toán điểm số...</p>
+              <p className="text-sm text-slate-500">Hệ thống đã lưu kết quả vào Database...</p>
             </div>
           </div>
         )}
@@ -327,7 +242,6 @@ export default function SinhVienDashboard() {
                   <CardTitle className="text-base font-semibold leading-relaxed">{question.content}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-2">
-                  {/* 🚀 Đã sửa: Xóa dòng (opt: any) nguy hiểm, TypeScript sẽ tự nhận diện */}
                   {question.options.map((opt) => (
                     <button
                       key={opt.id}
@@ -356,6 +270,9 @@ export default function SinhVienDashboard() {
     );
   }
 
+  // ============================================================================
+  // RENDER: GIAO DIỆN ĐỌC TÀI LIỆU
+  // ============================================================================
   if (readingLesson && insideClassLessons) {
     const lessonContent = getLessonContentDetails(readingLesson.id, readingLesson.title);
 
@@ -386,19 +303,13 @@ export default function SinhVienDashboard() {
             {lessonContent.map((section, idx) => (
               <Card key={idx} className="border shadow-sm overflow-hidden">
                 <CardHeader className="bg-slate-800 text-white py-4">
-                  <CardTitle className="text-base md:text-lg font-bold">
-                    {section.roman}
-                  </CardTitle>
+                  <CardTitle className="text-base md:text-lg font-bold">{section.roman}</CardTitle>
                 </CardHeader>
                 <CardContent className="p-6 space-y-5 bg-white">
                   {section.points.map((pt, pIdx) => (
                     <div key={pIdx} className="space-y-1.5 border-l-4 border-blue-500 pl-4 py-0.5 hover:bg-slate-50 transition-colors">
-                      <h4 className="text-sm md:text-base font-bold text-blue-700">
-                        {pt.label}
-                      </h4>
-                      <p className="text-sm text-slate-600 leading-relaxed text-justify">
-                        {pt.text}
-                      </p>
+                      <h4 className="text-sm md:text-base font-bold text-blue-700">{pt.label}</h4>
+                      <p className="text-sm text-slate-600 leading-relaxed text-justify">{pt.text}</p>
                     </div>
                   ))}
                 </CardContent>
@@ -407,7 +318,7 @@ export default function SinhVienDashboard() {
           </div>
 
           <div className="flex justify-between items-center bg-white p-4 rounded-lg border shadow-sm">
-            <span className="text-xs text-slate-400">Đọc kỹ kiến thức trước khi đóng trang tài liệu</span>
+            <span className="text-xs text-slate-400">Đọc kỹ kiến thức trước khi đóng trang</span>
             <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setReadingLesson(null)}>
               Đã học xong <CheckCircle className="h-4 w-4 ml-2" />
             </Button>
@@ -444,7 +355,7 @@ export default function SinhVienDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
               {lessonsData.length === 0 ? (
-                <div className="text-center p-8 border bg-white rounded-lg text-slate-400 text-sm">Chưa có bài giảng nào được cập nhật cho lớp học này.</div>
+                <div className="text-center p-8 border bg-white rounded-lg text-slate-400 text-sm">Chưa có bài giảng nào.</div>
               ) : (
                 lessonsData.map((chapterData, cIdx) => (
                   <Card key={cIdx} className="overflow-hidden border shadow-sm">
@@ -453,19 +364,13 @@ export default function SinhVienDashboard() {
                     </div>
                     <CardContent className="p-0 divide-y">
                       {chapterData.lessons.map((lesson) => (
-                        <div 
-                          key={lesson.id} 
-                          onClick={() => setReadingLesson(lesson)}
-                          className="p-4 flex items-start justify-between gap-4 hover:bg-blue-50/40 cursor-pointer transition-all group"
-                        >
+                        <div key={lesson.id} onClick={() => setReadingLesson(lesson)} className="p-4 flex items-start justify-between gap-4 hover:bg-blue-50/40 cursor-pointer transition-all group">
                           <div className="flex items-start gap-3">
                             <div className="mt-0.5 p-2 bg-blue-50 text-blue-600 rounded group-hover:bg-blue-600 group-hover:text-white transition-colors">
                               {lesson.type === "video" ? <Video className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
                             </div>
                             <div>
-                              <h4 className="font-semibold text-slate-800 text-sm leading-snug group-hover:text-blue-700 transition-colors">
-                                {lesson.title}
-                              </h4>
+                              <h4 className="font-semibold text-slate-800 text-sm leading-snug group-hover:text-blue-700">{lesson.title}</h4>
                               <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
                                 <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {lesson.duration}</span>
                                 <span>•</span>
@@ -474,7 +379,7 @@ export default function SinhVienDashboard() {
                             </div>
                           </div>
                           <div>
-                            <Badge variant={lesson.status === "Đã học" ? "default" : lesson.status === "Đang học" ? "secondary" : "outline"} className={lesson.status === "Đã học" ? "bg-emerald-500 text-white" : ""} >
+                            <Badge variant={lesson.status === "Đã học" ? "default" : "outline"} className={lesson.status === "Đã học" ? "bg-emerald-500 text-white" : ""} >
                               {lesson.status}
                             </Badge>
                           </div>
@@ -485,15 +390,12 @@ export default function SinhVienDashboard() {
                 ))
               )}
             </div>
-
             <div className="space-y-4">
               <Card>
                 <CardHeader><CardTitle className="text-sm font-bold">Chi tiết lớp</CardTitle></CardHeader>
                 <CardContent className="text-sm space-y-3 text-slate-600">
                   <p><strong>Lịch học:</strong> {insideClassLessons.schedule}</p>
                   <p><strong>Phòng học:</strong> {insideClassLessons.room}</p>
-                  <p><strong>Tín chỉ:</strong> {insideClassLessons.credits} tín chỉ</p>
-                  <p><strong>Thời gian khóa học:</strong> {insideClassLessons.startDate} đến {insideClassLessons.endDate}</p>
                 </CardContent>
               </Card>
             </div>
@@ -503,6 +405,9 @@ export default function SinhVienDashboard() {
     );
   }
 
+  // ============================================================================
+  // RENDER: DASHBOARD CHÍNH
+  // ============================================================================
   return (
     <div className="min-h-screen bg-slate-50 p-6 relative">
       {showEnrollToast && (
@@ -516,8 +421,8 @@ export default function SinhVienDashboard() {
         <div className="flex items-center space-x-3 bg-white p-6 rounded-lg border shadow-sm">
           <GraduationCap className="h-8 w-8 text-blue-600" />
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Trang Sinh Viên</h1>
-            <p className="text-sm text-slate-500">Đăng ký lớp học, làm bài kiểm tra & xem bảng điểm</p>
+            <h1 className="text-2xl font-bold text-slate-800">Trang Sinh Viên: {session?.user?.fullName || "Chưa rõ"}</h1>
+            <p className="text-sm text-slate-500">Đăng ký lớp học, làm bài kiểm tra thật & xem bảng điểm</p>
           </div>
         </div>
 
@@ -540,7 +445,7 @@ export default function SinhVienDashboard() {
             { key: "classes", label: "Đăng Ký Lớp Học", icon: <PlusCircle className="h-4 w-4" />, visible: true },
             { key: "my-classes", label: "Lớp học của tôi", icon: <Users className="h-4 w-4" />, visible: true },
             { key: "notifications", label: "Thông báo", icon: <Bell className="h-4 w-4" />, visible: true },
-            { key: "exams", label: "Bài Kiểm Tra", icon: <ClipboardList className="h-4 w-4" />, visible: enrolledCount > 0 },
+            { key: "exams", label: "Bài Kiểm Tra (DB)", icon: <ClipboardList className="h-4 w-4" />, visible: enrolledCount > 0 },
             { key: "grades", label: "Bảng Điểm", icon: <BarChart2 className="h-4 w-4" />, visible: enrolledCount > 0 },
           ] as { key: MainTab; label: string; icon: React.ReactNode; visible: boolean }[])
             .filter(t => t.visible)
@@ -638,9 +543,10 @@ export default function SinhVienDashboard() {
           </Card>
         )}
 
+        {/* 🚀 LUỒNG BÀI KIỂM TRA TỪ DATABASE THẬT */}
         {activeTab === "exams" && enrolledCount > 0 && (
           <Card>
-            <CardHeader><CardTitle className="text-base">Bài Kiểm Tra Học Phần</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Bài Kiểm Tra Học Phần (DB Thật)</CardTitle></CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
@@ -654,28 +560,34 @@ export default function SinhVienDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {exams.map(e => (
-                    <TableRow key={e.id}>
-                      <TableCell className="font-medium text-slate-800">{e.title}</TableCell>
-                      <TableCell className="font-mono text-xs">{e.subject}</TableCell>
-                      <TableCell className="text-sm text-slate-500">{e.duration} phút</TableCell>
-                      <TableCell>
-                        <Badge variant={e.status === "Đã nộp" ? "default" : "outline"} className={e.status === "Đã nộp" ? "bg-emerald-500 text-white" : "border-amber-500 text-amber-600"}>
-                          {e.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center font-bold">{e.score !== null ? e.score : "—"}</TableCell>
-                      <TableCell className="text-right">
-                        {e.status === "Chưa làm" ? (
-                          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setSelectedExam(e); setShowExamDialog(true); }}>
-                            Làm bài <Play className="h-3 w-3 ml-1" />
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-slate-400">Đã hoàn thành</span>
-                        )}
-                      </TableCell>
+                  {exams.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-6 text-slate-400">Không có bài thi nào được công bố.</TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    exams.map(e => (
+                      <TableRow key={e.id}>
+                        <TableCell className="font-medium text-slate-800">{e.title}</TableCell>
+                        <TableCell className="font-mono text-xs">{e.subject}</TableCell>
+                        <TableCell className="text-sm text-slate-500">{e.duration} phút</TableCell>
+                        <TableCell>
+                          <Badge variant={e.studentStatus === "Đã nộp" ? "default" : "outline"} className={e.studentStatus === "Đã nộp" ? "bg-emerald-500 text-white" : "border-amber-500 text-amber-600"}>
+                            {e.studentStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center font-bold text-lg">{e.studentScore !== null ? e.studentScore : "—"}</TableCell>
+                        <TableCell className="text-right">
+                          {e.studentStatus === "Chưa làm" ? (
+                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setSelectedExam(e); setShowExamDialog(true); }}>
+                              Làm bài <Play className="h-3 w-3 ml-1" />
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-slate-400">Đã lưu điểm DB</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

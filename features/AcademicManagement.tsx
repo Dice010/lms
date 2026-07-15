@@ -10,16 +10,15 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
-// Lấy Server Actions từ hạ tầng ổn định mới
+// Lấy Server Actions kết nối hạ tầng DB thực tế
 import { getCourses, createCourse, updateCourseStatus } from "@/app/actions/course-actions";
+import { getUsers } from "@/app/actions/user-actions";
 import { Course } from "@prisma/client";
 
-// --- CÀI ĐẶT BỘ CẢM BIẾN NHẬN ROLE TỪ DASHBOARD ---
 interface AcademicManagementProps {
   currentRole?: string;
 }
 
-// --- Type Definitions ---
 interface ClassInfo {
   id: string;
   name: string;
@@ -30,31 +29,37 @@ interface ClassInfo {
 
 type UICourse = Course & { assignedTeacher?: string | null };
 
+// Giữ lại khung Mock cho Lớp học (Do Schema ưu tiên phẳng hóa nghiệp vụ Môn học & Bài kiểm tra trọn vẹn trước)
 const initialClasses: ClassInfo[] = [
   { id: "CLS001", name: "SE2026_A", major: "Kỹ thuật phần mềm", studentCount: 35, maxCapacity: 40 },
   { id: "CLS002", name: "CS2026_B", major: "Khoa học máy tính", studentCount: 40, maxCapacity: 40 },
   { id: "CLS003", name: "AI2026_C", major: "Trí tuệ nhân tạo", studentCount: 28, maxCapacity: 35 },
 ];
 
-const mockTeachers = [
-  "TS. Nguyễn Văn A",
-  "ThS. Trần Thị B",
-  "PGS.TS. Lê Văn C",
-  "TS. Phạm Minh D"
-];
-
-// 🚀 ĐÓN ROLE VÀO COMPONENT
 export default function AcademicManagement({ currentRole = "PHONG_DAO_TAO" }: AcademicManagementProps) {
   // --- States ---
   const [classes, setClasses] = useState<ClassInfo[]>(initialClasses);
   const [subjects, setSubjects] = useState<UICourse[]>([]);
+  
+  // 🚀 DỮ LIỆU THẬT: State lưu trữ danh sách Giảng viên quét trực tiếp từ Database
+  const [realTeachers, setRealTeachers] = useState<string[]>([]);
 
+  // 🛠️ Đồng bộ dữ liệu real-time tránh lỗi vòng lặp cascading renders của ESLint
   const loadDatabaseData = useCallback(async () => {
     try {
-      const data = await getCourses();
-      setSubjects(data);
+      // 1. Đồng bộ danh sách Khóa học / Môn học từ Database
+      const courseData = await getCourses();
+      setSubjects(courseData);
+
+      // 2. 🚀 QUÉT GIẢNG VIÊN THẬT: Lấy từ DB, lọc đúng role GIANG_VIEN đang hoạt động
+      const allUsers = await getUsers();
+      const teachers = allUsers
+        .filter(u => u.role === "GIANG_VIEN" && u.status === "Hoạt động")
+        .map(u => u.fullName);
+      
+      setRealTeachers(teachers.length > 0 ? teachers : ["Chưa có giảng viên nào trên hệ thống"]);
     } catch (error) {
-      console.error("Lỗi lấy danh sách khóa học từ DB:", error);
+      console.error("Lỗi lấy danh sách dữ liệu từ DB:", error);
     }
   }, []);
 
@@ -135,8 +140,8 @@ export default function AcademicManagement({ currentRole = "PHONG_DAO_TAO" }: Ac
   };
 
   const handleSaveAssignment = () => {
-    if (!chosenTeacher) {
-      alert("Vui lòng chọn giảng viên!");
+    if (!chosenTeacher || chosenTeacher.startsWith("Chưa có")) {
+      alert("Vui lòng chọn một giảng viên hợp lệ!");
       return;
     }
 
@@ -336,7 +341,7 @@ export default function AcademicManagement({ currentRole = "PHONG_DAO_TAO" }: Ac
                   <CardTitle className="text-xl flex items-center gap-2">
                     <BookOpen className="h-5 w-5 text-blue-600" /> Quản lý & Phân công Giảng Viên
                   </CardTitle>
-                  <CardDescription>Danh sách các môn học đã được thông qua và phân công nhân sự.</CardDescription>
+                  <CardDescription>Danh sách các môn học đã được thông qua và phân công nhân sự từ DB thật.</CardDescription>
                 </div>
                 <Dialog open={isSubjectDialogOpen} onOpenChange={setIsSubjectDialogOpen}>
                   <DialogTrigger asChild>
@@ -474,23 +479,25 @@ export default function AcademicManagement({ currentRole = "PHONG_DAO_TAO" }: Ac
         </div>
       )}
 
-      {/* 🟢 POPUP PHÂN CÔNG GIẢNG VIÊN (DÙNG CHUNG) */}
+      {/* 🟢 POPUP PHÂN CÔNG GIẢNG VIÊN (SỬ DỤNG DỮ LIỆU DB THẬT) */}
       <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Phân công giảng viên</DialogTitle>
-            <DialogDescription>Chọn một giảng viên phù hợp thuộc bộ môn để đảm nhận môn học này.</DialogDescription>
+            <DialogDescription>Chọn một giảng viên thực tế trên hệ thống để đảm nhận môn học này.</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <label className="text-sm font-medium mb-2 block">Danh sách giảng viên:</label>
             <select 
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={chosenTeacher}
               onChange={(e) => setChosenTeacher(e.target.value)}
             >
               <option value="">-- Chọn Giảng Viên --</option>
-              {mockTeachers.map((teacher, index) => (
-                <option key={index} value={teacher}>{teacher}</option>
+              {realTeachers.map((teacher, index) => (
+                <option key={index} value={teacher} disabled={teacher.startsWith("Chưa có")}>
+                  {teacher}
+                </option>
               ))}
             </select>
           </div>

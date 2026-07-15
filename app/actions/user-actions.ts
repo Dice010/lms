@@ -1,8 +1,8 @@
-// --- File: app/actions/user-actions.ts ---
 "use server";
 
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { hashSync } from "bcryptjs"; // 🚀 Bổ sung công cụ băm mật khẩu
 
 export async function getUsers() {
   return await prisma.user.findMany({
@@ -11,12 +11,15 @@ export async function getUsers() {
 }
 
 export async function createUser(data: { username: string; fullName: string; role: string; password: string }) {
+  // 🚀 Băm mật khẩu người dùng nhập vào trước khi nhét xuống Database
+  const hashedPassword = hashSync(data.password, 10); 
+
   const user = await prisma.user.create({
     data: {
       username: data.username,
       fullName: data.fullName,
       role: data.role,
-      password: data.password,
+      password: hashedPassword, // Lưu mật khẩu đã băm
     },
   });
   revalidatePath("/dashboard");
