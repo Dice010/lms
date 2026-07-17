@@ -9,9 +9,10 @@ import { redirect } from "next/navigation";
 import HRDashboard from "@/features/HRDashboard"; // File HR của Toàn
 import AdminDashboard from "@/features/AdminDashboard"; // File Admin của Toàn
 import HieuTruongDashboard from "@/features/HieuTruongDashboard"; // File Hiệu trưởng của Toàn
-import AcademicManagement from "@/features/AcademicManagement"; // File Quản lý của Phúc (Dùng chung PĐT & TBM)
 import SinhVienDashboard from "@/features/SinhVienDashboard"; // File Sinh viên của Trí
 import GiangVienDashboard from "@/features/GiangVienDashboard"; // File Giảng viên của Trí
+import PDTDashboard from "@/features/PDTDashboard";
+import TBMDashboard from "@/features/TBMDashboard";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -35,13 +36,10 @@ export default async function DashboardPage() {
       return <HRDashboard />;
 
     case "PHONG_DAO_TAO":
-      // 🔥 GIẢI QUYẾT LỖI DÍNH CHUNG TAB CỦA PHÚC:
-      // Ép file của Phúc biết người đang đăng nhập là Phòng Đào Tạo qua Prop
-      return <AcademicManagement currentRole="PHONG_DAO_TAO" />;
-
+      return <PDTDashboard />;
+      
     case "TRUONG_BO_MON":
-      // Ép file của Phúc biết người đang đăng nhập là Trưởng Bộ Môn để tự ẩn/hiện tab đúng quyền
-      return <AcademicManagement currentRole="TRUONG_BO_MON" />;
+      return <TBMDashboard />;
 
     case "GIANG_VIEN":
       return <GiangVienDashboard />;

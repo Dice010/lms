@@ -8,11 +8,11 @@ import { getCourses, updateCourseStatus } from "@/app/actions/course-actions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShieldCheck, BookOpen, PlusCircle, Users, Settings, ShieldOff, Search } from "lucide-react";
+import { ShieldCheck, BookOpen, PlusCircle, Users, Settings, ShieldOff, Search, FileText } from "lucide-react";
 
 // --- Bộ chuyển đổi Role giữa UI và Database ---
 const mapRoleToDB = (uiRole: string) => {
@@ -61,6 +61,7 @@ export default function HieuTruongDashboard() {
     }
   }, []);
 
+  // 🔥 FIX 1: Bọc trong hàm async để tránh lỗi set-state-in-effect
   useEffect(() => {
     const initFetch = async () => {
       await loadData();
@@ -116,19 +117,27 @@ export default function HieuTruongDashboard() {
   const [filterStatus, setFilterStatus] = useState("Tất cả");
   const filteredCourses = filterStatus === "Tất cả" ? courses : courses.filter(c => c.status === filterStatus);
 
+  // States ĐỂ XỬ LÝ TỪ CHỐI CÓ LÝ DO
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
   const handleApproveCourse = async (id: number) => {
-    await updateCourseStatus(id, "Đã công bố");
+    await updateCourseStatus(id, "Đã công bố"); 
     await loadData();
   };
 
-  const handleRejectCourse = async (id: number) => {
-    await updateCourseStatus(id, "Từ chối");
-    await loadData();
+  const confirmReject = async () => {
+    if (rejectingId && rejectReason.trim() !== "") {
+      await updateCourseStatus(rejectingId, "Từ chối", rejectReason);
+      await loadData();
+      setRejectingId(null);
+      setRejectReason("");
+    }
   };
 
   const stats = [
     { label: "Tài khoản cấp cao", value: highLevelAccounts.length, icon: <Users className="h-5 w-5 text-indigo-500" /> },
-    { label: "Môn học chờ duyệt", value: courses.filter(c => c.status === "Bản nháp").length, icon: <BookOpen className="h-5 w-5 text-amber-500" /> },
+    { label: "Môn học chờ duyệt", value: courses.filter(c => c.status === "Chờ duyệt").length, icon: <BookOpen className="h-5 w-5 text-amber-500" /> },
     { label: "Tổng người dùng", value: systemUsers.length, icon: <Users className="h-5 w-5 text-blue-500" /> },
     { label: "Bị khóa", value: users.filter(u => u.status === "Bị khóa").length, icon: <ShieldOff className="h-5 w-5 text-red-500" /> },
   ];
@@ -212,7 +221,7 @@ export default function HieuTruongDashboard() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Danh Sách Môn Học Đề Xuất</CardTitle>
             <div className="flex gap-2">
-              {["Tất cả", "Bản nháp", "Đã công bố", "Từ chối"].map(f => (
+              {["Tất cả", "Chờ duyệt", "Đã công bố", "Từ chối"].map(f => (
                 <button key={f} onClick={() => setFilterStatus(f)}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                     filterStatus === f ? "bg-emerald-600 text-white" : "bg-white text-slate-600 border"
@@ -239,10 +248,16 @@ export default function HieuTruongDashboard() {
                     <TableCell className="text-slate-500 text-sm">{c.uploadedAt}</TableCell>
                     <TableCell><StatusBadge status={c.status} /></TableCell>
                     <TableCell className="text-right">
-                      {c.status === "Bản nháp" && (
+                      {c.status === "Chờ duyệt" && (
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="destructive" onClick={() => handleRejectCourse(c.id)}>Từ chối</Button>
+                          <Button size="sm" variant="destructive" onClick={() => setRejectingId(c.id)}>Từ chối</Button>
                           <Button size="sm" onClick={() => handleApproveCourse(c.id)}>Duyệt</Button>
+                        </div>
+                      )}
+                      {/* 🔥 FIX 2: Bỏ chữ (c as any), gọi thẳng c.rejectReason vì DB đã cập nhật kiểu */}
+                      {c.status === "Từ chối" && c.rejectReason && (
+                        <div className="text-xs text-red-500 mt-1 italic max-w-xs ml-auto">
+                          Lý do: {c.rejectReason}
                         </div>
                       )}
                     </TableCell>
@@ -309,6 +324,33 @@ export default function HieuTruongDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* DIALOG: Nhập lý do từ chối */}
+      <Dialog open={rejectingId !== null} onOpenChange={(open) => !open && setRejectingId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <FileText className="h-5 w-5" /> Lý do từ chối phê duyệt
+            </DialogTitle>
+            <DialogDescription>
+              Vui lòng cung cấp lý do để Phòng Đào Tạo có thể điều chỉnh và đề xuất lại.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {/* 🔥 FIX 3: Sửa min-h-[100px] thành min-h-25 theo chuẩn Tailwind */}
+            <textarea
+              className="w-full min-h-25 p-3 border rounded-md text-sm outline-none focus:ring-2 focus:ring-red-500"
+              placeholder="Nhập lý do từ chối môn học này..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectingId(null)}>Hủy</Button>
+            <Button variant="destructive" disabled={!rejectReason.trim()} onClick={confirmReject}>Xác nhận từ chối</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Tạo Account Cấp Cao */}
       <Dialog open={showAddAccount} onOpenChange={setShowAddAccount}>

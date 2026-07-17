@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 // 1. GENERATOR: Chỉ định công cụ sinh code (luôn là prisma-client-js cho Next.js)
 generator client {
   provider = "prisma-client-js"
@@ -19,35 +17,56 @@ model User {
   username  String   @unique
   password  String   // Vì làm Auth cứng tạm thời nên ta lưu pass đơn giản
   fullName  String
-  // Cột Role quản lý quyền hạn (Lưu dưới dạng chuỗi: "ADMIN", "HIEU_TRUONG", "HR", "PHONG_DAO_TAO", "TRUONG_BO_MON", "GIANG_VIEN", "SINH_VIEN")
   role      String   @default("SINH_VIEN") 
   status    String   @default("Hoạt động")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt // Prisma tự cập nhật thời gian mỗi khi bạn sửa thông tin user
 }
 
-// --- Bổ sung vào cuối tệp prisma/schema.prisma ---
-
 model Course {
-  id          Int      @id @default(autoincrement())
-  title       String   // Tiêu đề bài học / khóa học (Trí đặt là title)
-  subject     String   // Tên môn học (VD: Lập trình Java, CTDL & GT)
-  status      String   @default("Bản nháp") // "Bản nháp" hoặc "Đã công bố"
-  uploadedAt  String   // Lưu ngày tạo dạng chuỗi YYYY-MM-DD như mock data của Trí
+  id              Int      @id @default(autoincrement())
+  title           String   // Tiêu đề bài học / khóa học (Trí đặt là title)
+  subject         String   // Tên môn học (VD: Lập trình Java, CTDL & GT)
+  status          String   @default("Chờ duyệt") // Mặc định tạo môn là Chờ duyệt
+  uploadedAt      String   // Lưu ngày tạo dạng chuỗi YYYY-MM-DD
   assignedTeacher String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  rejectReason    String?  // Phản hồi từ chối của Hiệu trưởng (TC07)
+  
+  // 🔥 THÊM CỘT NÀY ĐỂ LƯU NỘI DUNG BÀI GIẢNG DẠNG JSON
+  content         String? 
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// 🔥 BẢNG LỚP HỌC (Đã nâng cấp cho TC08 và TC09)
+model Class {
+  id               Int      @id @default(autoincrement())
+  name             String   // Tên lớp (VD: SE2026_A)
+  major            String   // Chuyên ngành (VD: Kỹ thuật phần mềm)
+  studentCount     Int      @default(0) // Sĩ số hiện tại
+  maxCapacity      Int      // Sĩ số tối đa
+  status           String   @default("PENDING") // Trạng thái: PENDING (Chờ PĐT duyệt), APPROVED (Đã duyệt), REJECTED (Từ chối)
+  subjectCode      String   // Mã môn học mà lớp này được tạo ra từ đó (Ví dụ: SWE201)
+  
+  // 🔥 3 CỘT MỚI THÊM VÀO CHO LUỒNG TC08 & TC09
+  rejectReason     String?  // Lý do từ chối khi PĐT không duyệt lớp
+  assignedTbm      String?  // PĐT phân công Trưởng Bộ Môn nào quản lý lớp này
+  assignedLecturer String?  // TBM phân công Giảng viên nào dạy lớp này (TC09)
+  
+  createdAt        DateTime @default(now())
 }
 
 model Exam {
-  id          Int      @id @default(autoincrement())
-  title       String   // Tiêu đề bài kiểm tra
-  subject     String   // Môn học thuộc bài kiểm tra
-  duration    Int      // Thời gian làm bài (phút)
-  questions   Int      // Số lượng câu hỏi
-  openAt      String   // Thời gian mở đề dạng chuỗi
-  status      String   @default("Bản nháp") // "Bản nháp" hoặc "Đã công bố"
-  createdAt   DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  title        String   // Tiêu đề bài kiểm tra
+  subject      String   // Môn học thuộc bài kiểm tra
+  duration     Int      // Thời gian làm bài (phút)
+  questions    Int      // Số lượng câu hỏi
+  openAt       String   // Thời gian mở đề dạng chuỗi
+  status       String   @default("Bản nháp") // "Bản nháp" hoặc "Đã công bố"
+  questionData String?
+  createdAt    DateTime @default(now())
 }
 
 model ExamResult {
@@ -56,4 +75,23 @@ model ExamResult {
   student     String   // Tên sinh viên làm bài
   score       Float    // Điểm số hệ 10
   submittedAt String   // Thời gian nộp bài
+}
+
+// 🔥 BẢNG ĐĂNG KÝ LỚP HỌC (Lưu lại sinh viên nào học lớp nào)
+model Enrollment {
+  id           Int      @id @default(autoincrement())
+  studentEmail String   // Email sinh viên đăng ký
+  classId      Int      // ID của lớp học được đăng ký
+  enrolledAt   DateTime @default(now())
+}
+
+// 🔥 BẢNG BÀI GIẢNG (Giảng viên tạo bài giảng)
+model Lesson {
+  id         Int      @id @default(autoincrement())
+  title      String
+  courseId   Int      // Gắn với ID môn học hoặc lớp học
+  courseName String   // Tên môn học để hiển thị UI
+  content    String?  // Nội dung HTML bài giảng
+  status     String   @default("Bản nháp")
+  createdAt  DateTime @default(now())
 }
